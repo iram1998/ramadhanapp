@@ -1,3 +1,4 @@
+
 export interface Theme {
   id: string;
   name: string;
@@ -27,6 +28,14 @@ export interface Task {
   icon: string;
 }
 
+export interface HistoryData {
+  date: string; // YYYY-MM-DD
+  score: number;
+  completedTasksCount: number;
+  fastingStatus: 'puasa' | 'tidak' | 'uzur';
+  pagesRead: number; // New: Track Quran pages per day
+}
+
 export interface DailyProgress {
   date: string;
   score: number;
@@ -41,6 +50,7 @@ export interface QuranProgress {
   totalKhatamTarget: number; // Days
   startDate: string;
   completedJuz: number[];
+  bookmarks: { id: string; title: string; type: 'quran' | 'dua' }[]; // New: Bookmarks
 }
 
 export interface PrayerTime {

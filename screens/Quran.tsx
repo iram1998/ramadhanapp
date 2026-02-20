@@ -1,32 +1,35 @@
+
 import React from 'react';
 import { useApp } from '../contexts/AppContext';
 
-// Replaced Recharts with this custom CSS Bar Chart Component
+// Custom CSS Bar Chart Component
 const SimpleBarChart = ({ data, color, mutedColor }: { data: { name: string; value: number }[], color: string, mutedColor: string }) => {
-  const maxValue = Math.max(...data.map(d => d.value));
+  const maxValue = Math.max(...data.map(d => d.value), 10); // Minimum scale of 10 for better viz
   
   return (
     <div className="flex items-end justify-between h-32 w-full gap-2 pt-4">
       {data.map((item, index) => {
         const heightPercent = (item.value / maxValue) * 100;
-        const isHigh = item.value > 10;
+        const isHigh = item.value > 5;
+        const isToday = index === data.length - 1;
+
         return (
           <div key={index} className="flex flex-col items-center flex-1 gap-2 group">
              <div className="relative w-full flex items-end justify-center h-full rounded-t-sm overflow-hidden bg-gray-50/50">
                 <div 
                   style={{ 
-                    height: `${heightPercent}%`, 
-                    backgroundColor: isHigh ? color : mutedColor,
-                    opacity: isHigh ? 1 : 0.5 
+                    height: `${heightPercent || 2}%`, // Min height for visibility
+                    backgroundColor: isToday ? color : (item.value > 0 ? color : mutedColor),
+                    opacity: isToday ? 1 : (item.value > 0 ? 0.6 : 0.3) 
                   }} 
-                  className="w-full rounded-t-md transition-all duration-500 group-hover:opacity-80"
+                  className={`w-full rounded-t-md transition-all duration-500 group-hover:opacity-80`}
                 ></div>
                 {/* Tooltip on hover */}
                 <div className="absolute -top-8 bg-black text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
                     {item.value} pages
                 </div>
              </div>
-             <span className="text-[10px] font-bold opacity-40">{item.name}</span>
+             <span className={`text-[10px] font-bold ${isToday ? 'text-[var(--color-primary)]' : 'opacity-40'}`}>{item.name}</span>
           </div>
         );
       })}
@@ -34,32 +37,71 @@ const SimpleBarChart = ({ data, color, mutedColor }: { data: { name: string; val
   );
 };
 
-const chartData = [
-  { name: 'Mon', value: 8 },
-  { name: 'Tue', value: 15 },
-  { name: 'Wed', value: 6 },
-  { name: 'Thu', value: 11 },
-  { name: 'Fri', value: 18 },
-  { name: 'Sat', value: 4 },
-  { name: 'Sun', value: 9 },
+const RECOMMENDED_BOOKMARKS = [
+    { id: 'ayat-kursi', title: 'Ayatul Kursi (Al-Baqarah: 255)', type: 'quran' as const },
+    { id: 'al-kahf', title: 'Al-Kahf (Jumat Sunnah)', type: 'quran' as const },
+    { id: 'al-mulk', title: 'Al-Mulk (Before Sleep)', type: 'quran' as const },
 ];
 
 export const Quran = () => {
-  const { quranProgress, updateQuranProgress, theme } = useApp();
+  const { quranProgress, updateQuranProgress, theme, pagesReadToday, setPagesReadToday, history } = useApp();
   const percentage = Math.round((quranProgress.completedJuz.length / 30) * 100);
+
+  // --- CHART DATA LOGIC ---
+  // Get last 6 days from history + today
+  const getChartData = () => {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const data = [];
+      
+      // We want 7 bars. 6 from history (in reverse) + 1 Today.
+      // Note: History is chronological [oldest, ..., yesterday]
+      
+      const historyLen = history.length;
+      const startIndex = Math.max(0, historyLen - 6);
+      const relevantHistory = history.slice(startIndex);
+
+      // Pad with mock empty days if history is short (e.g. new user)
+      const neededPadding = 6 - relevantHistory.length;
+      for (let i = 0; i < neededPadding; i++) {
+          data.push({ name: '-', value: 0 });
+      }
+
+      // Map history
+      relevantHistory.forEach(day => {
+          const d = new Date(day.date);
+          data.push({ name: days[d.getDay()], value: day.pagesRead || 0 });
+      });
+
+      // Add Today
+      const today = new Date();
+      data.push({ name: 'Today', value: pagesReadToday });
+
+      return data;
+  };
+
+  const chartData = getChartData();
 
   const handleNextJuz = () => {
     const nextJuz = quranProgress.currentJuz < 30 ? quranProgress.currentJuz + 1 : 1;
-    // Simple logic: add current juz to completed list if not there
     const newCompleted = [...new Set([...quranProgress.completedJuz, quranProgress.currentJuz])];
     
     updateQuranProgress({
         currentJuz: nextJuz,
         completedJuz: newCompleted,
-        // Reset or mock next surah logic
         currentSurah: `Juz ${nextJuz}`, 
         currentAyah: 1
     });
+  };
+  
+  const toggleBookmark = (item: { id: string; title: string; type: 'quran' | 'dua' }) => {
+      const exists = quranProgress.bookmarks?.some(b => b.id === item.id);
+      let newBookmarks;
+      if (exists) {
+          newBookmarks = quranProgress.bookmarks.filter(b => b.id !== item.id);
+      } else {
+          newBookmarks = [...(quranProgress.bookmarks || []), item];
+      }
+      updateQuranProgress({ bookmarks: newBookmarks });
   };
 
   return (
@@ -115,6 +157,29 @@ export const Quran = () => {
                     </p>
                 </div>
             </div>
+            
+            {/* Input Pages Today */}
+            <div className="bg-[var(--color-card)] p-4 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm flex items-center justify-between">
+                <div>
+                     <p className="text-sm font-bold">Halaman Hari Ini</p>
+                     <p className="text-xs opacity-50">Log bacaan harianmu</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => setPagesReadToday(Math.max(0, pagesReadToday - 1))}
+                        className="size-8 rounded-full border border-gray-200 flex items-center justify-center active:scale-90 transition-transform"
+                    >
+                        <span className="material-symbols-outlined text-sm">remove</span>
+                    </button>
+                    <span className="text-xl font-mono font-bold w-8 text-center">{pagesReadToday}</span>
+                     <button 
+                        onClick={() => setPagesReadToday(pagesReadToday + 1)}
+                        className="size-8 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center active:scale-90 transition-transform shadow-lg shadow-[var(--color-primary)]/30"
+                    >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                    </button>
+                </div>
+            </div>
 
             {/* Continue Reading CTA */}
             <div 
@@ -140,7 +205,7 @@ export const Quran = () => {
             {/* Stats Chart */}
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between px-1">
-                    <h3 className="text-lg font-bold tracking-tight">Reading Statistics</h3>
+                    <h3 className="text-lg font-bold tracking-tight">Activity (Pages)</h3>
                     <span className="text-[var(--color-primary)] text-[10px] font-bold bg-[var(--color-primary)]/10 px-2 py-1 rounded uppercase tracking-wider">Last 7 Days</span>
                 </div>
                 <div className="rounded-2xl border border-[var(--color-primary)]/10 bg-[var(--color-card)] p-6 shadow-sm">
@@ -155,23 +220,36 @@ export const Quran = () => {
             {/* Bookmarks */}
             <div className="flex flex-col gap-4">
                  <div className="flex items-center justify-between px-1">
-                    <h3 className="text-lg font-bold tracking-tight">Favorite Verses</h3>
-                    <button className="text-[var(--color-primary)] text-sm font-bold hover:underline">See All</button>
+                    <h3 className="text-lg font-bold tracking-tight">Bookmarks</h3>
                 </div>
-                {[
-                    { loc: 'Al-Baqarah, 255', note: 'Ayatul Kursi' },
-                    { loc: 'Al-Kahf, 1-10', note: 'Friday Sunnah' }
-                ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-[var(--color-card)] p-4 shadow-sm hover:border-[var(--color-primary)]/30 transition-all cursor-pointer group">
-                        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)]/5 text-[var(--color-primary)] group-hover:bg-[var(--color-primary)] group-hover:text-white transition-colors">
-                            <span className="material-symbols-outlined">bookmark</span>
+                {/* Render User Bookmarks if any */}
+                {(quranProgress.bookmarks || []).map((b, i) => (
+                     <div key={b.id} className="flex items-center gap-4 rounded-2xl border border-[var(--color-primary)] bg-[var(--color-primary)]/5 p-4 shadow-sm transition-all cursor-pointer group">
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)] text-white transition-colors">
+                            <span className="material-symbols-outlined filled">bookmark</span>
                         </div>
                         <div className="flex flex-1 flex-col">
-                            <p className="text-base font-bold text-[var(--color-text)]">{item.loc}</p>
-                            <p className="text-xs opacity-50 font-medium uppercase tracking-wide">{item.note}</p>
+                            <p className="text-base font-bold text-[var(--color-text)]">{b.title}</p>
+                            <p className="text-xs opacity-50 font-medium uppercase tracking-wide">Saved</p>
                         </div>
-                        <button className="size-8 rounded-full flex items-center justify-center opacity-40 hover:opacity-100 hover:bg-gray-100">
-                            <span className="material-symbols-outlined text-lg">more_vert</span>
+                        <button onClick={(e) => { e.stopPropagation(); toggleBookmark(b); }} className="size-8 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors">
+                            <span className="material-symbols-outlined text-lg">delete</span>
+                        </button>
+                    </div>
+                ))}
+                
+                {/* Render Recommendations (if not already bookmarked) */}
+                {RECOMMENDED_BOOKMARKS.filter(rb => !quranProgress.bookmarks?.some(b => b.id === rb.id)).map((item, i) => (
+                    <div key={i} className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-[var(--color-card)] p-4 shadow-sm hover:border-[var(--color-primary)]/30 transition-all cursor-pointer group">
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)]/5 text-[var(--color-primary)] group-hover:bg-[var(--color-primary)] group-hover:text-white transition-colors">
+                            <span className="material-symbols-outlined">bookmark_border</span>
+                        </div>
+                        <div className="flex flex-1 flex-col">
+                            <p className="text-base font-bold text-[var(--color-text)]">{item.title}</p>
+                            <p className="text-xs opacity-50 font-medium uppercase tracking-wide">Recommended</p>
+                        </div>
+                        <button onClick={() => toggleBookmark(item)} className="size-8 rounded-full flex items-center justify-center opacity-40 hover:opacity-100 hover:bg-gray-100">
+                            <span className="material-symbols-outlined text-lg">add</span>
                         </button>
                     </div>
                 ))}

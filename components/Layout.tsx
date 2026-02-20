@@ -1,3 +1,4 @@
+
 import React, { ReactNode } from 'react';
 import { useApp } from '../contexts/AppContext';
 
@@ -19,7 +20,7 @@ const NavButton = ({ icon, label, isActive, onClick }: { icon: string; label: st
 );
 
 export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange }) => {
-  const { theme } = useApp();
+  const { theme, t } = useApp();
 
   const style = {
     '--color-primary': theme.colors.primary,
@@ -40,31 +41,31 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
           <div className="flex justify-between items-center">
             <NavButton 
               icon="home" 
-              label="Home" 
+              label={t('nav_home')} 
               isActive={activeTab === 'dashboard'} 
               onClick={() => onTabChange('dashboard')} 
             />
             <NavButton 
               icon="task_alt" 
-              label="Tracker" 
+              label={t('nav_tracker')} 
               isActive={activeTab === 'tracker'} 
               onClick={() => onTabChange('tracker')} 
             />
             <NavButton 
               icon="menu_book" 
-              label="Quran" 
+              label={t('nav_quran')} 
               isActive={activeTab === 'quran'} 
               onClick={() => onTabChange('quran')} 
             />
             <NavButton 
               icon="auto_stories" 
-              label="Doa" 
+              label={t('nav_dua')} 
               isActive={activeTab === 'doa'} 
               onClick={() => onTabChange('doa')} 
             />
              <NavButton 
               icon="person" 
-              label="Profile" 
+              label={t('nav_profile')} 
               isActive={activeTab === 'profile'} 
               onClick={() => onTabChange('profile')} 
             />

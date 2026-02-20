@@ -1,9 +1,19 @@
-import React from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
+import { Task } from '../types';
 
-// Fixed: Defined before usage
-const StatCard = ({ icon, value, label, color }: { icon: string, value: string, label: string, color: string }) => (
+// --- DATA HADITS ---
+const HADITHS = [
+    { text: "Sebaik-baik kalian adalah yang mempelajari Al-Quran dan mengajarkannya.", narrator: "HR. Bukhari" },
+    { text: "Puasa adalah perisai yang dengannya seorang hamba membentengi diri dari api neraka.", narrator: "HR. Ahmad" },
+    { text: "Barangsiapa mendirikan sholat pada malam Lailatul Qadar karena iman dan mengharap pahala, diampuni dosanya yang telah lalu.", narrator: "HR. Bukhari" },
+    { text: "Apabila datang bulan Ramadhan, pintu-pintu surga dibuka, pintu-pintu neraka ditutup dan setan-setan dibelenggu.", narrator: "HR. Bukhari & Muslim" },
+    { text: "Saling memberi hadiahlah kalian, niscaya kalian akan saling mencintai.", narrator: "HR. Bukhari" }
+];
+
+const StatCard = ({ icon, value, label, color }: { icon: string, value: string | number, label: string, color: string }) => (
     <div className="bg-[var(--color-card)] p-4 rounded-xl border border-[var(--color-primary)]/10 flex flex-col items-center gap-2 shadow-sm transition-transform hover:-translate-y-1 duration-300">
         <div className="p-3 rounded-full bg-opacity-10 text-opacity-100" style={{ backgroundColor: `${color}20`, color: color }}>
             <span className="material-symbols-outlined text-xl">{icon}</span>
@@ -15,21 +25,156 @@ const StatCard = ({ icon, value, label, color }: { icon: string, value: string, 
     </div>
 );
 
+// --- NEW COMPONENT: ACTIVITY CHART ---
+const ActivityChart = ({ history, tasks, primaryColor }: { history: any[], tasks: Task[], primaryColor: string }) => {
+    // Helper to get day name (Sen, Sel, etc)
+    const getDayName = (dateStr: string) => {
+        const date = new Date(dateStr);
+        // Fallback for simple names if Intl not fully supported or for custom brief
+        const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+        return days[date.getDay()];
+    };
+
+    // Prepare Data (Last 6 days + Today)
+    const data = [];
+    const todayCount = tasks.filter(t => t.completed).length;
+    
+    // Fill previous days from history
+    const len = history.length;
+    // Take last 6 entries
+    const start = Math.max(0, len - 6);
+    for (let i = start; i < len; i++) {
+        data.push({
+            day: getDayName(history[i].date),
+            value: history[i].completedTasksCount || 0,
+            isToday: false
+        });
+    }
+
+    // Pad with empty data if history is empty (new user)
+    while (data.length < 6) {
+        data.unshift({ day: '-', value: 0, isToday: false });
+    }
+
+    // Add Today
+    data.push({
+        day: 'Hari Ini',
+        value: todayCount,
+        isToday: true
+    });
+
+    const maxVal = 12; // Approx max total tasks (Wajib + Sunnah) per day
+
+    return (
+        <div className="bg-[var(--color-card)] p-5 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm mt-4">
+            <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[var(--color-primary)] bg-[var(--color-primary)]/10 p-1 rounded-md text-sm">bar_chart</span>
+                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Grafik Ibadah</h3>
+                </div>
+                <span className="text-[10px] font-bold opacity-40">7 HARI TERAKHIR</span>
+            </div>
+            
+            <div className="flex items-end justify-between h-32 gap-2">
+                {data.map((item, idx) => {
+                    const height = Math.min((item.value / maxVal) * 100, 100);
+                    // Safe height for very small values to show at least a pixel
+                    const displayHeight = item.value > 0 ? `${height}%` : '4px';
+                    
+                    return (
+                        <div key={idx} className="flex-1 flex flex-col items-center gap-2 group cursor-default">
+                            <div className="w-full h-full flex items-end justify-center bg-gray-50/50 dark:bg-white/5 rounded-t-lg relative overflow-hidden">
+                                <div 
+                                    style={{ height: displayHeight }}
+                                    className={`w-full transition-all duration-1000 ease-out rounded-t-md relative ${item.isToday ? 'opacity-100' : 'opacity-40'}`}
+                                >
+                                    <div 
+                                        className="absolute inset-0 w-full h-full"
+                                        style={{ backgroundColor: primaryColor }}
+                                    ></div>
+                                </div>
+                                {/* Tooltip Value on Hover/Tap */}
+                                {item.value > 0 && (
+                                     <div className="absolute bottom-2 text-[10px] font-bold text-[var(--color-text)] opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--color-bg)]/80 px-1 rounded shadow-sm backdrop-blur-sm z-10">
+                                        {item.value}
+                                    </div>
+                                )}
+                            </div>
+                            <span className={`text-[9px] font-bold uppercase ${item.isToday ? 'text-[var(--color-primary)]' : 'opacity-40'}`}>
+                                {item.day}
+                            </span>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    );
+};
+
 export const Dashboard = () => {
-  const { theme, score, location, nextPrayer, hijriDate, tasks } = useApp();
+  const { theme, score, location, nextPrayer, hijriDate, tasks, history, quranProgress, t } = useApp();
   const { user } = useAuth();
   
-  // Safe fallback if data is still loading
-  const displayPrayer = nextPrayer || { name: 'Loading...', time: '--:--' };
-  const completedTasks = tasks.filter(t => t.completed).length;
+  // State for Countdown
+  const [timeLeft, setTimeLeft] = useState<string>('--:--:--');
+  const [randomHadith, setRandomHadith] = useState(HADITHS[0]);
+
+  // --- 1. COUNTDOWN LOGIC ---
+  useEffect(() => {
+    // Pick random hadith on mount
+    setRandomHadith(HADITHS[Math.floor(Math.random() * HADITHS.length)]);
+
+    if (!nextPrayer) return;
+
+    const timer = setInterval(() => {
+        const now = new Date();
+        const [h, m] = nextPrayer.time.split(':').map(Number);
+        const target = new Date();
+        target.setHours(h, m, 0, 0);
+
+        if (target.getTime() < now.getTime()) {
+             target.setDate(target.getDate() + 1);
+        }
+
+        const diff = target.getTime() - now.getTime();
+
+        if (diff <= 0) {
+            setTimeLeft("00:00:00");
+        } else {
+            const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+            const minutes = Math.floor((diff / (1000 * 60)) % 60);
+            const seconds = Math.floor((diff / 1000) % 60);
+            
+            setTimeLeft(
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+            );
+        }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [nextPrayer]);
+
+  // --- 2. STATS CALCULATION ---
+  const streakCount = history.length + (score > 0 ? 1 : 0);
+
+  // Calculate Level based on Total Score (History Score + Today Score)
+  const totalScore = history.reduce((acc, day) => acc + (day.score || 0), 0) + score;
+  const currentLevel = Math.floor(totalScore / 500) + 1;
+  const nextLevelScore = currentLevel * 500;
+  const progressToNextLevel = Math.min(((totalScore % 500) / 500) * 100, 100);
+
+  const completedJuzCount = quranProgress.completedJuz.length;
+  const charityToday = tasks.find(t => t.id === 'sedekah' && t.completed) ? 1 : 0;
+
+  const displayPrayer = nextPrayer || { name: 'Selesai', time: '--:--' };
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in pb-12">
       {/* Header */}
       <header className="p-6 sticky top-0 z-10 bg-[var(--color-bg)]/80 backdrop-blur-md">
         <div className="flex items-center justify-between">
             <div className="flex flex-col">
-            <h1 className="text-2xl font-extrabold tracking-tight">Welcome, {user?.name.split(' ')[0]}</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight">{t('greeting')}, {user?.name.split(' ')[0]}</h1>
             <p className="text-sm font-medium opacity-60">{hijriDate || 'Ramadhan 1447H'}</p>
             </div>
             <div className="size-10 rounded-full border-2 border-[var(--color-primary)]/20 overflow-hidden">
@@ -41,71 +186,102 @@ export const Dashboard = () => {
       <div className="px-6 space-y-6">
         
         {/* Prayer Card */}
-        <div className="relative overflow-hidden rounded-2xl bg-[var(--color-primary)] text-white p-6 shadow-xl shadow-[var(--color-primary)]/20 transition-all duration-500">
+        <div className="relative overflow-hidden rounded-2xl bg-[var(--color-primary)] text-white p-6 shadow-xl shadow-[var(--color-primary)]/20 transition-all duration-500 group">
             <div className="relative z-10 flex justify-between items-start">
                 <div className="space-y-1">
                     <div className="flex items-center gap-1.5 opacity-90">
                         <span className="material-symbols-outlined text-sm">location_on</span>
-                        <span className="text-xs font-semibold tracking-wider uppercase">{location}</span>
+                        <span className="text-xs font-semibold tracking-wider uppercase">{location.split(',')[0]}</span>
                     </div>
-                    <h2 className="text-4xl font-bold">{displayPrayer.name} <span className="text-2xl font-light opacity-80">{displayPrayer.time}</span></h2>
-                    <p className="text-sm font-medium opacity-90">
-                        {displayPrayer.name === 'Loading...' ? 'Calculating...' : 'Next Prayer'}
-                    </p>
+                    
+                    <div className="mt-2">
+                        <p className="text-sm font-medium opacity-80 mb-1">{t('next_prayer')} {displayPrayer.name}</p>
+                        <h2 className="text-4xl font-mono font-bold tracking-tighter">
+                            {timeLeft}
+                        </h2>
+                    </div>
+                    
+                    <div className="inline-flex items-center gap-2 mt-2 bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                        <span className="material-symbols-outlined text-xs">alarm</span>
+                        <span className="text-xs font-bold">{displayPrayer.time}</span>
+                    </div>
                 </div>
-                <button className="bg-white/20 hover:bg-white/30 p-2 rounded-lg backdrop-blur-sm transition-colors">
-                    <span className="material-symbols-outlined">schedule</span>
-                </button>
+                
+                {/* Icon Big */}
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+                     <span className="material-symbols-outlined text-3xl">mosque</span>
+                </div>
             </div>
             {/* Abstract Decorative Circles */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-12 -mb-12 blur-xl"></div>
+            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mt-20 blur-3xl group-hover:scale-110 transition-transform duration-700"></div>
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-black/10 rounded-full -ml-16 -mb-16 blur-2xl"></div>
         </div>
 
         {/* Spiritual Progress */}
         <section className="bg-[var(--color-card)] p-6 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-                <h3 className="font-bold text-lg">Spiritual Progress</h3>
-                <span className="text-xs font-bold text-[var(--color-primary)] px-2.5 py-1 bg-[var(--color-primary)]/10 rounded-full uppercase tracking-wider">Level 12</span>
+                <h3 className="font-bold text-lg">Level Spiritual</h3>
+                <span className="text-xs font-bold text-[var(--color-primary)] px-2.5 py-1 bg-[var(--color-primary)]/10 rounded-full uppercase tracking-wider">
+                    {t('level')} {currentLevel}
+                </span>
             </div>
             
             <div className="flex flex-col items-center">
                 {/* Custom Circular Progress using conic-gradient */}
                 <div 
-                  className="relative size-40 rounded-full flex items-center justify-center transition-all duration-1000"
+                  className="relative size-40 rounded-full flex items-center justify-center transition-all duration-1000 shadow-inner bg-[var(--color-bg)]"
                   style={{
-                    background: `radial-gradient(closest-side, var(--color-card) 79%, transparent 80% 100%), conic-gradient(var(--color-primary) ${Math.min((score / 1000) * 100, 100)}%, var(--color-background) 0)`
+                    background: `radial-gradient(closest-side, var(--color-card) 79%, transparent 80% 100%), conic-gradient(var(--color-primary) ${progressToNextLevel}%, var(--color-background) 0)`
                   }}
                 >
                     <div className="text-center">
-                        <span className="block text-3xl font-extrabold text-[var(--color-text)]">{score}</span>
-                        <span className="text-xs font-semibold opacity-50 uppercase tracking-widest">/ 1000 pts</span>
+                        <span className="block text-3xl font-extrabold text-[var(--color-text)]">{totalScore}</span>
+                        <span className="text-xs font-semibold opacity-50 uppercase tracking-widest">/ {nextLevelScore} XP</span>
                     </div>
                 </div>
                 
                 <p className="mt-6 text-sm text-center opacity-70 leading-relaxed max-w-[240px]">
-                    You're doing great! Complete your <span className="text-[var(--color-primary)] font-bold">Dzuhur</span> to reach today's milestone.
+                   Teruskan ibadahmu! <br/>
+                   <span className="font-bold text-[var(--color-primary)]">{Math.round(nextLevelScore - totalScore)} XP</span> lagi untuk naik level.
                 </p>
             </div>
         </section>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-4">
-            <StatCard icon="local_fire_department" value="12 Days" label="Streak" color={theme.colors.secondary} />
-            <StatCard icon="auto_stories" value="5 Juz" label="Completed" color={theme.colors.primary} />
-            <StatCard icon="volunteer_activism" value="15x" label="Sedekah" color="#8b5cf6" />
+            <StatCard 
+                icon="local_fire_department" 
+                value={`${streakCount} Hari`} 
+                label={t('streak')}
+                color={theme.colors.secondary} 
+            />
+            <StatCard 
+                icon="auto_stories" 
+                value={`${completedJuzCount} Juz`} 
+                label={t('completed')} 
+                color={theme.colors.primary} 
+            />
+            <StatCard 
+                icon="volunteer_activism" 
+                value={`${charityToday > 0 ? 'Sudah' : 'Belum'}`} 
+                label={t('sedekah')} 
+                color="#8b5cf6" 
+            />
         </div>
+
+        {/* NEW CHART SECTION */}
+        <ActivityChart history={history} tasks={tasks} primaryColor={theme.colors.primary} />
 
         {/* Daily Hadith */}
         <div className="p-6 rounded-2xl bg-gradient-to-br from-[var(--color-primary)]/5 to-[var(--color-secondary)]/5 border border-[var(--color-primary)]/10">
             <div className="flex items-center gap-2 mb-3">
                 <span className="material-symbols-outlined text-[var(--color-primary)] text-sm">format_quote</span>
-                <h4 className="text-xs font-bold uppercase tracking-widest opacity-50">Daily Hadith</h4>
+                <h4 className="text-xs font-bold uppercase tracking-widest opacity-50">Hadits Hari Ini</h4>
             </div>
-            <p className="font-medium leading-relaxed italic opacity-80">
-                "The best of you are those who learn the Quran and teach it."
+            <p className="font-medium leading-relaxed italic opacity-80 text-sm">
+                "{randomHadith.text}"
             </p>
-            <p className="mt-3 text-xs font-bold text-[var(--color-primary)]">— Sahih Bukhari</p>
+            <p className="mt-3 text-xs font-bold text-[var(--color-primary)] text-right">— {randomHadith.narrator}</p>
         </div>
       </div>
     </div>

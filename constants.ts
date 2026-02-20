@@ -1,4 +1,8 @@
+
 import { Task, Theme } from './types';
+
+// URL Audio Adzan (Mishary Rashid Alafasy - Short/Clear version)
+export const ADZAN_AUDIO_URL = "https://media.blubrry.com/muslim_central_quran/podcasts.qurancentral.com/adhan/mishary-rashid-alafasy/adhan-mishary-rashid-alafasy.mp3";
 
 export const THEMES: Theme[] = [
   {
@@ -69,18 +73,72 @@ export const INITIAL_TASKS: Task[] = [
   { id: 'ashar', label: 'Ashar', points: 10, completed: false, category: 'wajib', icon: 'wb_twilight' },
   { id: 'maghrib', label: 'Maghrib', points: 10, completed: false, category: 'wajib', icon: 'nights_stay' },
   { id: 'isya', label: 'Isya', points: 10, completed: false, category: 'wajib', icon: 'bedtime' },
+  
   { id: 'tarawih', label: 'Tarawih', points: 15, completed: false, category: 'sunnah', icon: 'mosque' },
   { id: 'tahajud', label: 'Tahajud', points: 20, completed: false, category: 'sunnah', icon: 'alarm' },
   { id: 'dhuha', label: 'Dhuha', points: 10, completed: false, category: 'sunnah', icon: 'light_mode' },
+  { id: 'dzikir-pagi', label: 'Dzikir Pagi', points: 5, completed: false, category: 'sunnah', icon: 'wb_iridescent' },
+  { id: 'dzikir-petang', label: 'Dzikir Petang', points: 5, completed: false, category: 'sunnah', icon: 'dark_mode' },
+
   { id: 'sedekah', label: 'Sedekah', points: 15, completed: false, category: 'charity', icon: 'volunteer_activism' },
-  { id: 'tilawah', label: 'Tilawah (1 Juz)', points: 20, completed: false, category: 'quran', icon: 'menu_book' },
+  { id: 'tilawah', label: 'Tilawah (1/2 Juz+)', points: 20, completed: false, category: 'quran', icon: 'menu_book' },
 ];
 
-export const PRAYER_SCHEDULE_MOCK = [
-  { name: 'Imsak', time: '04:22', isNext: false },
-  { name: 'Subuh', time: '04:32', isNext: false },
-  { name: 'Dzuhur', time: '11:58', isNext: true },
-  { name: 'Ashar', time: '15:12', isNext: false },
-  { name: 'Maghrib', time: '18:02', isNext: false },
-  { name: 'Isya', time: '19:11', isNext: false },
-];
+export const TRANSLATIONS = {
+  id: {
+    nav_home: 'Beranda',
+    nav_tracker: 'Ibadah',
+    nav_quran: 'Quran',
+    nav_dua: 'Doa',
+    nav_profile: 'Profil',
+    greeting: 'Ahlan',
+    next_prayer: 'Menuju',
+    streak: 'Streak',
+    level: 'Level',
+    sedekah: 'Sedekah',
+    completed: 'Tamat',
+    fasting_schedule: 'Jadwal Puasa',
+    prayer_times: 'Sholat 5 Waktu',
+    settings_title: 'Profile & Pengaturan',
+    location: 'Lokasi & Jadwal',
+    language: 'Bahasa',
+    notifications: 'Notifikasi & Adzan',
+    logout: 'Keluar Aplikasi',
+    general: 'Umum',
+    theme: 'Tema Aplikasi',
+    save: 'Simpan',
+    search_placeholder: 'Cari Kota...',
+    use_gps: 'Gunakan GPS Otomatis',
+    audio_adzan: 'Suara Adzan',
+    test_audio: 'Test Suara',
+    stop_audio: 'Stop Suara',
+  },
+  en: {
+    nav_home: 'Home',
+    nav_tracker: 'Tracker',
+    nav_quran: 'Quran',
+    nav_dua: 'Dua',
+    nav_profile: 'Profile',
+    greeting: 'Ahlan',
+    next_prayer: 'Upcoming',
+    streak: 'Streak',
+    level: 'Level',
+    sedekah: 'Charity',
+    completed: 'Completed',
+    fasting_schedule: 'Fasting Schedule',
+    prayer_times: '5 Daily Prayers',
+    settings_title: 'Profile & Settings',
+    location: 'Location & Schedule',
+    language: 'Language',
+    notifications: 'Notifications & Adhan',
+    logout: 'Logout',
+    general: 'General',
+    theme: 'App Theme',
+    save: 'Save',
+    search_placeholder: 'Search City...',
+    use_gps: 'Use GPS Automatically',
+    audio_adzan: 'Adhan Audio',
+    test_audio: 'Test Audio',
+    stop_audio: 'Stop Audio',
+  }
+};

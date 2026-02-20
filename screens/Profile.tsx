@@ -1,23 +1,26 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { THEMES } from '../constants';
+import { searchCity, CityResult } from '../utils';
 
-// Fixed: Defined before usage
-const SettingItem = ({ icon, label, toggle, value, defaultChecked }: { icon: string, label: string, toggle?: boolean, value?: string, defaultChecked?: boolean }) => (
-    <div className="flex items-center justify-between p-4 bg-[var(--color-card)] rounded-xl shadow-sm border border-gray-100/50">
+const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: { icon: string, label: string, toggle?: boolean, value?: string, checked?: boolean, onClick?: () => void, loading?: boolean }) => (
+    <div onClick={onClick} className={`flex items-center justify-between p-4 bg-[var(--color-card)] rounded-xl shadow-sm border border-gray-100/50 ${onClick ? 'cursor-pointer active:scale-[0.99] transition-transform' : ''}`}>
         <div className="flex items-center gap-3">
             <span className="material-symbols-outlined opacity-60">{icon}</span>
             <span className="font-medium">{label}</span>
         </div>
-        {toggle ? (
+        {loading ? (
+             <div className="size-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+        ) : toggle ? (
             <div className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" defaultChecked={defaultChecked} />
+                <input type="checkbox" className="sr-only peer" checked={checked} onChange={() => {}} />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--color-primary)]"></div>
             </div>
         ) : (
             <div className="flex items-center gap-1 opacity-60">
-                <span className="text-sm">{value}</span>
+                <span className="text-sm truncate max-w-[150px]">{value}</span>
                 <span className="material-symbols-outlined text-sm">chevron_right</span>
             </div>
         )}
@@ -25,13 +28,50 @@ const SettingItem = ({ icon, label, toggle, value, defaultChecked }: { icon: str
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp } = useApp();
   const { user, logout } = useAuth();
+  
+  // Location Search State
+  const [showLocationSearch, setShowLocationSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<CityResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // Date Picker State
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const handleSearch = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!searchQuery.trim()) return;
+      
+      setIsSearching(true);
+      const results = await searchCity(searchQuery);
+      setSearchResults(results);
+      setIsSearching(false);
+  };
+
+  const handleSelectCity = (city: CityResult) => {
+      setManualLocation(city);
+      setShowLocationSearch(false);
+      setSearchResults([]);
+      setSearchQuery('');
+  };
+
+  const handleUseGPS = () => {
+      setManualLocation(null);
+      refreshLocation();
+      setShowLocationSearch(false);
+  };
+
+  // Toggle Language
+  const handleLanguageToggle = () => {
+      setLanguage(language === 'id' ? 'en' : 'id');
+  };
 
   return (
-    <div className="animate-fade-in pb-12">
+    <div className="animate-fade-in pb-12 relative min-h-screen">
         <header className="p-6 bg-[var(--color-card)] shadow-sm">
-             <h1 className="text-2xl font-bold mb-6">Profile & Settings</h1>
+             <h1 className="text-2xl font-bold mb-6">{t('settings_title')}</h1>
              <div className="flex items-center gap-4">
                 <div className="size-16 rounded-full border-4 border-[var(--color-primary)]/20 overflow-hidden">
                     <img src={user?.photoUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Abdullah"} alt="Profile" className="w-full h-full object-cover" />
@@ -47,11 +87,55 @@ export const Profile = () => {
         </header>
 
         <main className="p-6 space-y-8">
+            {/* Install PWA Prompt (Only if installable) */}
+            {isInstallable && (
+                <div className="bg-[var(--color-primary)]/5 border border-[var(--color-primary)]/20 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                         <div className="size-10 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white">
+                             <span className="material-symbols-outlined">download</span>
+                         </div>
+                         <div>
+                             <p className="font-bold text-sm">Install Aplikasi</p>
+                             <p className="text-xs opacity-60">Akses lebih cepat & offline.</p>
+                         </div>
+                    </div>
+                    <button 
+                        onClick={installApp}
+                        className="px-3 py-1.5 bg-[var(--color-primary)] text-white text-xs font-bold rounded-lg hover:brightness-95"
+                    >
+                        Install
+                    </button>
+                </div>
+            )}
+
+            {/* Location Settings */}
+            <section className="space-y-3">
+                <h3 className="font-bold text-lg mb-2">{t('location')}</h3>
+                <SettingItem 
+                    icon="location_on" 
+                    label={t('location')} 
+                    value={location} 
+                    onClick={() => setShowLocationSearch(true)}
+                />
+                <p className="text-xs opacity-50 px-2">
+                    {manualLocation ? 'Menggunakan lokasi manual.' : 'Menggunakan Auto-Detect GPS.'} 
+                    Klik untuk mengubah.
+                </p>
+                
+                {/* 1st Ramadhan Setting */}
+                <SettingItem 
+                    icon="calendar_month" 
+                    label="Tetapkan 1 Ramadhan" 
+                    value={ramadhanStartDate} 
+                    onClick={() => setShowDatePicker(true)}
+                />
+            </section>
+
             {/* Theme Switcher */}
             <section>
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
                     <span className="material-symbols-outlined text-[var(--color-primary)]">palette</span>
-                    App Theme
+                    {t('theme')}
                 </h3>
                 <div className="grid grid-cols-1 gap-3">
                     {THEMES.map((t) => (
@@ -71,12 +155,57 @@ export const Profile = () => {
                 </div>
             </section>
             
-            {/* Other Settings Mock */}
+            {/* General Settings & Audio */}
             <section className="space-y-3">
-                <h3 className="font-bold text-lg mb-2">General</h3>
-                <SettingItem icon="notifications" label="Notifications" toggle />
-                <SettingItem icon="location_on" label="Location Services" toggle defaultChecked />
-                <SettingItem icon="translate" label="Language" value="Bahasa Indonesia" />
+                <h3 className="font-bold text-lg mb-2">{t('general')}</h3>
+                <SettingItem 
+                    icon="notifications" 
+                    label={t('notifications')} 
+                    toggle 
+                    checked={notificationsEnabled}
+                    onClick={toggleNotifications}
+                />
+                
+                {/* Audio Adzan Toggle */}
+                {notificationsEnabled && (
+                    <div className="ml-4 space-y-2">
+                        <SettingItem 
+                            icon="volume_up" 
+                            label={t('audio_adzan')} 
+                            toggle 
+                            checked={audioEnabled}
+                            onClick={toggleAudio}
+                        />
+                        {/* Test Button Audio */}
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={playTestAudio}
+                                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-2 ${isPlaying ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'}`}
+                            >
+                                <span className="material-symbols-outlined text-sm">{isPlaying ? 'pause' : 'play_arrow'}</span>
+                                {isPlaying ? 'Playing...' : t('test_audio')}
+                            </button>
+                             {isPlaying && (
+                                <button 
+                                    onClick={stopAudio}
+                                    className="py-2 px-3 rounded-xl text-xs font-bold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                                >
+                                    {t('stop_audio')}
+                                </button>
+                             )}
+                        </div>
+                        <p className="text-[10px] opacity-60 italic">
+                            *Note: Klik "Test Suara" setidaknya satu kali agar browser mengizinkan suara otomatis.
+                        </p>
+                    </div>
+                )}
+
+                <SettingItem 
+                    icon="translate" 
+                    label={t('language')} 
+                    value={language === 'id' ? 'Bahasa Indonesia' : 'English'} 
+                    onClick={handleLanguageToggle}
+                />
             </section>
 
             {/* Logout */}
@@ -85,9 +214,105 @@ export const Profile = () => {
                 className="w-full py-4 text-red-500 font-bold bg-red-50 hover:bg-red-100 rounded-xl transition-colors flex items-center justify-center gap-2"
             >
                 <span className="material-symbols-outlined">logout</span>
-                Sign Out
+                {t('logout')}
             </button>
         </main>
+
+        {/* LOCATION SEARCH MODAL */}
+        {showLocationSearch && (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-[var(--color-card)] w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-lg font-bold">Ubah Lokasi</h3>
+                        <button onClick={() => setShowLocationSearch(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    <form onSubmit={handleSearch} className="relative">
+                        <input 
+                            autoFocus
+                            type="text" 
+                            placeholder={t('search_placeholder')} 
+                            className="w-full p-4 pl-12 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] transition-colors"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 opacity-40">search</span>
+                        <button 
+                            type="submit"
+                            disabled={isSearching}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--color-primary)] text-white px-3 py-1.5 rounded-lg text-sm font-bold disabled:opacity-50"
+                        >
+                            {isSearching ? '...' : 'Cari'}
+                        </button>
+                    </form>
+
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                        <button 
+                            onClick={handleUseGPS}
+                            className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-[var(--color-primary)]/5 border border-dashed border-[var(--color-primary)]/30 text-[var(--color-primary)] font-bold mb-4"
+                        >
+                            <span className="material-symbols-outlined">my_location</span>
+                            {t('use_gps')}
+                        </button>
+
+                        {searchResults.length > 0 && (
+                            <p className="text-xs font-bold uppercase opacity-50 px-2">Hasil Pencarian</p>
+                        )}
+                        
+                        {searchResults.map((city, idx) => (
+                            <button 
+                                key={idx}
+                                onClick={() => handleSelectCity(city)}
+                                className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-gray-50 border border-gray-100"
+                            >
+                                <span className="material-symbols-outlined opacity-40">location_city</span>
+                                <div>
+                                    <p className="font-bold text-sm text-[var(--color-text)]">{city.name}</p>
+                                    <p className="text-[10px] opacity-50">Lat: {city.lat.toFixed(2)}, Lon: {city.lon.toFixed(2)}</p>
+                                </div>
+                            </button>
+                        ))}
+
+                        {searchResults.length === 0 && searchQuery && !isSearching && (
+                            <div className="text-center py-8 opacity-50">
+                                <p>Tidak ditemukan. Coba nama kota yang lebih umum.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* DATE PICKER MODAL */}
+        {showDatePicker && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold">Tetapkan 1 Ramadhan</h3>
+                         <button onClick={() => setShowDatePicker(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                    <p className="text-sm opacity-60">
+                        Pilih tanggal dimulainya 1 Ramadhan 1447H di wilayah Anda.
+                    </p>
+                    <input 
+                        type="date" 
+                        value={ramadhanStartDate}
+                        onChange={(e) => setRamadhanStartDate(e.target.value)}
+                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] font-bold text-lg text-center"
+                    />
+                    <button 
+                        onClick={() => setShowDatePicker(false)}
+                        className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
+                    >
+                        {t('save')}
+                    </button>
+                 </div>
+            </div>
+        )}
     </div>
   );
 };
