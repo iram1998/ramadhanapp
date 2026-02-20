@@ -17,8 +17,10 @@ export interface User {
   name: string;
   email: string;
   photoUrl: string;
-  achievements?: string[]; // Array of Achievement IDs
-  friends?: string[]; // Array of User IDs (friends)
+  achievements?: string[]; 
+  friends?: string[]; // Confirmed friends IDs
+  friendRequestsIncoming?: string[]; // IDs asking to be friends
+  friendRequestsOutgoing?: string[]; // IDs I invited
 }
 
 export interface Task {
@@ -120,4 +122,5 @@ export interface LeaderboardEntry {
   avatar: string;
   isCurrentUser: boolean;
   rank: number;
+  email?: string; // Optional for friend search display
 }

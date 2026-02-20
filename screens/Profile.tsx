@@ -28,7 +28,7 @@ const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: 
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements, friendsLeaderboard, addFriendByEmail, updateDisplayName } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements, friendsLeaderboard, incomingRequests, outgoingRequests, addFriendByEmail, acceptFriend, rejectFriend, removeFriend, updateDisplayName } = useApp();
   const { user, logout } = useAuth();
   
   // Location Search State
@@ -50,6 +50,9 @@ export const Profile = () => {
   // Add Friend State
   const [friendEmail, setFriendEmail] = useState('');
   const [friendStatus, setFriendStatus] = useState<{ loading: boolean, message: string, type: 'success'|'error'|'', invite?: boolean }>({ loading: false, message: '', type: '' });
+  
+  // Social Tab State
+  const [socialTab, setSocialTab] = useState<'friends' | 'requests'>('friends');
 
   // iOS Detection for Install Instructions
   const [isIOS, setIsIOS] = useState(false);
@@ -201,7 +204,7 @@ export const Profile = () => {
                             disabled={friendStatus.loading}
                             className="bg-[var(--color-primary)] text-white px-3 rounded-xl flex items-center justify-center disabled:opacity-50"
                         >
-                            {friendStatus.loading ? <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined">add</span>}
+                            {friendStatus.loading ? <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined">person_add</span>}
                         </button>
                     </div>
                     {/* Status Message */}
@@ -214,19 +217,94 @@ export const Profile = () => {
                         </div>
                     )}
                 </div>
+
+                {/* TABS */}
+                <div className="flex border-b border-gray-100 mb-3">
+                    <button 
+                        onClick={() => setSocialTab('friends')}
+                        className={`flex-1 py-2 text-xs font-bold ${socialTab === 'friends' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'opacity-50'}`}
+                    >
+                        Teman ({friendsLeaderboard.length - 1})
+                    </button>
+                    <button 
+                        onClick={() => setSocialTab('requests')}
+                        className={`flex-1 py-2 text-xs font-bold ${socialTab === 'requests' ? 'text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]' : 'opacity-50'}`}
+                    >
+                        Request ({incomingRequests.length})
+                    </button>
+                </div>
                 
-                {/* Mini List */}
-                <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
-                    {friendsLeaderboard.filter(f => !f.isCurrentUser).map(friend => (
-                        <div key={friend.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100">
-                             <img src={friend.avatar} className="size-8 rounded-full bg-white" alt="avatar" />
-                             <div className="flex-1 min-w-0">
-                                 <p className="text-sm font-bold truncate">{friend.name}</p>
-                             </div>
-                        </div>
-                    ))}
-                    {friendsLeaderboard.length <= 1 && (
-                        <p className="text-xs text-center opacity-40 italic py-2">Belum ada teman ditambahkan.</p>
+                {/* CONTENT */}
+                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                    
+                    {/* CONFIRMED FRIENDS */}
+                    {socialTab === 'friends' && (
+                        <>
+                             {friendsLeaderboard.filter(f => !f.isCurrentUser).length === 0 && (
+                                <p className="text-xs text-center opacity-40 italic py-4">Belum ada teman. Undang mereka!</p>
+                             )}
+                             {friendsLeaderboard.filter(f => !f.isCurrentUser).map(friend => (
+                                <div key={friend.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100 group">
+                                     <img src={friend.avatar} className="size-8 rounded-full bg-white" alt="avatar" />
+                                     <div className="flex-1 min-w-0">
+                                         <p className="text-sm font-bold truncate">{friend.name}</p>
+                                     </div>
+                                     <button 
+                                        onClick={() => removeFriend(friend.id)}
+                                        className="text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Hapus Teman"
+                                    >
+                                        <span className="material-symbols-outlined text-lg">delete</span>
+                                     </button>
+                                </div>
+                            ))}
+                        </>
+                    )}
+
+                    {/* REQUESTS */}
+                    {socialTab === 'requests' && (
+                        <>
+                            {/* INCOMING */}
+                            {incomingRequests.length > 0 && (
+                                <div className="mb-2">
+                                    <p className="text-[10px] font-bold uppercase opacity-50 mb-1">Permintaan Masuk</p>
+                                    {incomingRequests.map(req => (
+                                        <div key={req.id} className="flex items-center gap-2 p-2 rounded-lg bg-blue-50 border border-blue-100 mb-2">
+                                            <img src={req.avatar} className="size-8 rounded-full bg-white" alt="avatar" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold truncate">{req.name}</p>
+                                                <p className="text-[10px] opacity-60">Ingin berteman</p>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => acceptFriend(req.id)} className="p-1 bg-green-500 text-white rounded shadow-sm"><span className="material-symbols-outlined text-sm">check</span></button>
+                                                <button onClick={() => rejectFriend(req.id)} className="p-1 bg-red-500 text-white rounded shadow-sm"><span className="material-symbols-outlined text-sm">close</span></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* OUTGOING */}
+                            {outgoingRequests.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-bold uppercase opacity-50 mb-1">Menunggu Konfirmasi</p>
+                                    {outgoingRequests.map(req => (
+                                        <div key={req.id} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100 mb-1 opacity-70">
+                                            <img src={req.avatar} className="size-8 rounded-full bg-white grayscale" alt="avatar" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold truncate">{req.name}</p>
+                                                <p className="text-[10px] opacity-60">Undangan terkirim</p>
+                                            </div>
+                                            <span className="material-symbols-outlined text-sm opacity-40">hourglass_empty</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {incomingRequests.length === 0 && outgoingRequests.length === 0 && (
+                                <p className="text-xs text-center opacity-40 italic py-4">Tidak ada permintaan aktif.</p>
+                            )}
+                        </>
                     )}
                 </div>
             </section>

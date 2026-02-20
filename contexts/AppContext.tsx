@@ -5,7 +5,7 @@ import { THEMES, INITIAL_TASKS, TRANSLATIONS, ADZAN_AUDIO_URL, ACHIEVEMENTS } fr
 import { getPrayerTimes, getHijriDate, calculateRamadhanDay, addMinutesToTime } from '../utils';
 import { useAuth } from './AuthContext';
 import { db } from '../firebase';
-import { doc, setDoc, onSnapshot, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 interface AppContextType {
   // Navigation
@@ -57,8 +57,15 @@ interface AppContextType {
   achievements: string[]; // Unlocked Achievement IDs
   
   // Friend System
-  friendsLeaderboard: LeaderboardEntry[];
+  friendsLeaderboard: LeaderboardEntry[]; // Confirmed Friends
+  incomingRequests: LeaderboardEntry[];
+  outgoingRequests: LeaderboardEntry[];
+  
   addFriendByEmail: (email: string) => Promise<{ success: boolean; message: string; notFound?: boolean }>;
+  acceptFriend: (friendId: string) => Promise<void>;
+  rejectFriend: (friendId: string) => Promise<void>;
+  removeFriend: (friendId: string) => Promise<void>;
+  
   updateDisplayName: (newName: string) => Promise<void>;
   
   // New: Achievement Popup State
@@ -128,8 +135,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Gamification & Social State
   const [achievements, setAchievements] = useState<string[]>([]);
   const [newlyUnlockedAchievement, setNewlyUnlockedAchievement] = useState<Achievement | null>(null);
+  
   const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [friendIds, setFriendIds] = useState<string[]>([]); // Helper to track friend IDs locally
+  const [incomingRequests, setIncomingRequests] = useState<LeaderboardEntry[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<LeaderboardEntry[]>([]);
+  
+  const [friendIds, setFriendIds] = useState<string[]>([]); // Confirmed IDs
+  const [incomingIds, setIncomingIds] = useState<string[]>([]);
+  const [outgoingIds, setOutgoingIds] = useState<string[]>([]);
 
   const theme = THEMES.find((t) => t.id === currentThemeId) || THEMES[0];
   const isDemoUser = !user || user.id === 'mock-user-123';
@@ -297,22 +310,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (email === user.email) return { success: false, message: "Tidak bisa menambahkan diri sendiri." };
 
       if (isDemoUser) {
-          // Demo Mode Mock Logic
           if (email.includes('error')) return { success: false, message: "Email tidak ditemukan.", notFound: true };
-          
-          const mockFriend: LeaderboardEntry = {
-              id: `friend-${Math.random()}`,
+          // Demo logic: Just simulate outgoing request appearing
+          const mockRequest: LeaderboardEntry = {
+              id: `temp-${Math.random()}`,
               name: email.split('@')[0],
-              score: Math.floor(Math.random() * 2000),
+              score: 0,
               avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
               isCurrentUser: false,
-              rank: 0
+              rank: 0,
+              email: email
           };
-          setFriendsLeaderboard(prev => [...prev, mockFriend]);
-          return { success: true, message: `Berhasil menambahkan ${mockFriend.name}` };
+          setOutgoingRequests(prev => [...prev, mockRequest]);
+          return { success: true, message: `Permintaan terkirim ke ${email}` };
       }
 
       try {
+          // 1. Find User by Email
           const usersRef = collection(db, 'users');
           const q = query(usersRef, where("email", "==", email));
           const querySnapshot = await getDocs(q);
@@ -322,26 +336,107 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           }
 
           const friendDoc = querySnapshot.docs[0];
-          const friendData = friendDoc.data();
+          const friendId = friendDoc.id;
           
-          if (friendIds.includes(friendDoc.id)) {
-              return { success: false, message: "Teman sudah ada di daftar." };
-          }
+          // 2. Checks
+          if (friendIds.includes(friendId)) return { success: false, message: "Sudah menjadi teman." };
+          if (incomingIds.includes(friendId)) return { success: false, message: "Orang ini sudah mengirim permintaan padamu. Cek tab Request." };
+          if (outgoingIds.includes(friendId)) return { success: false, message: "Permintaan sudah dikirim sebelumnya." };
 
-          // Update current user's friend list in Firestore
-          const currentUserRef = doc(db, 'users', user.id);
-          await updateDoc(currentUserRef, {
-              friends: arrayUnion(friendDoc.id)
+          // 3. Update Target User (Add to Incoming)
+          const targetRef = doc(db, 'users', friendId);
+          await updateDoc(targetRef, {
+              friendRequestsIncoming: arrayUnion(user.id)
           });
           
-          // Local update handled by snapshot listener or manual refresh
-          return { success: true, message: `Berhasil menambahkan ${friendData.name || 'Teman'}` };
+          // 4. Update Current User (Add to Outgoing)
+          const myRef = doc(db, 'users', user.id);
+          await updateDoc(myRef, {
+              friendRequestsOutgoing: arrayUnion(friendId)
+          });
+
+          return { success: true, message: `Permintaan pertemanan dikirim ke ${friendDoc.data().name || 'Pengguna'}` };
 
       } catch (e) {
           console.error("Add friend error:", e);
-          return { success: false, message: "Terjadi kesalahan." };
+          return { success: false, message: "Terjadi kesalahan koneksi." };
       }
   };
+
+  const acceptFriend = async (friendId: string) => {
+      if (!user || !db) return;
+      if (isDemoUser) {
+           // Demo logic: Move from incoming to friends
+           const req = incomingRequests.find(r => r.id === friendId);
+           if(req) {
+               setFriendsLeaderboard(prev => [...prev, req]);
+               setIncomingRequests(prev => prev.filter(r => r.id !== friendId));
+           }
+           return;
+      }
+
+      try {
+          // 1. Update Me: Remove from Incoming, Add to Friends
+          const myRef = doc(db, 'users', user.id);
+          await updateDoc(myRef, {
+              friendRequestsIncoming: arrayRemove(friendId),
+              friends: arrayUnion(friendId)
+          });
+
+          // 2. Update Sender: Remove from Outgoing, Add to Friends
+          const senderRef = doc(db, 'users', friendId);
+          await updateDoc(senderRef, {
+              friendRequestsOutgoing: arrayRemove(user.id),
+              friends: arrayUnion(user.id)
+          });
+
+      } catch(e) { console.error("Accept friend error", e); }
+  }
+
+  const rejectFriend = async (friendId: string) => {
+      if (!user || !db) return;
+      if (isDemoUser) {
+          setIncomingRequests(prev => prev.filter(r => r.id !== friendId));
+          return;
+      }
+
+      try {
+          // 1. Update Me: Remove from Incoming
+          const myRef = doc(db, 'users', user.id);
+          await updateDoc(myRef, {
+              friendRequestsIncoming: arrayRemove(friendId)
+          });
+
+          // 2. Update Sender: Remove from Outgoing
+          const senderRef = doc(db, 'users', friendId);
+          await updateDoc(senderRef, {
+              friendRequestsOutgoing: arrayRemove(user.id)
+          });
+      } catch(e) { console.error("Reject friend error", e); }
+  }
+
+  const removeFriend = async (friendId: string) => {
+      if (!user || !db) return;
+      if (isDemoUser) {
+          setFriendsLeaderboard(prev => prev.filter(f => f.id !== friendId));
+          return;
+      }
+      if(!window.confirm("Hapus teman ini dari circle?")) return;
+
+      try {
+          // 1. Remove from Me
+          const myRef = doc(db, 'users', user.id);
+          await updateDoc(myRef, {
+              friends: arrayRemove(friendId)
+          });
+
+          // 2. Remove from Friend
+          const friendRef = doc(db, 'users', friendId);
+          await updateDoc(friendRef, {
+              friends: arrayRemove(user.id)
+          });
+      } catch(e) { console.error("Remove friend error", e); }
+  }
 
   const updateDisplayName = async (newName: string) => {
       if (!user) return;
@@ -352,21 +447,49 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
           const userRef = doc(db, 'users', user.id);
           await updateDoc(userRef, { name: newName });
-          // Note: AuthContext might need refresh, but Firestore data is updated
       } catch (e) {
           console.error("Update name error", e);
       }
   };
 
-  // Fetch Friends Data for Leaderboard
-  useEffect(() => {
-      const fetchFriendsData = async () => {
-          if (!user || !db) return;
+  // Helper to fetch user profiles for lists
+  const fetchUserProfiles = async (ids: string[]): Promise<LeaderboardEntry[]> => {
+      if (!ids || ids.length === 0 || !db) return [];
+      try {
+          const promises = ids.map(id => getDoc(doc(db, 'users', id)));
+          const snaps = await Promise.all(promises);
           
-          // If Demo User, we skip this and rely on the mock data set in the other useEffect
-          if (isDemoUser) return;
+          return snaps.map(snap => {
+              if(!snap.exists()) return null;
+              const d = snap.data();
+              const totalH = (d.history || []).reduce((acc: number, h: HistoryData) => acc + (h.score || 0), 0);
+              const total = totalH + (d.score || 0);
+              
+              return {
+                  id: snap.id,
+                  name: d.name || 'User',
+                  score: total,
+                  avatar: d.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${d.email}`,
+                  isCurrentUser: false,
+                  rank: 0,
+                  email: d.email
+              };
+          }).filter(Boolean) as LeaderboardEntry[];
+      } catch(e) {
+          console.error("Error fetching profiles", e);
+          return [];
+      }
+  }
 
-          // 1. Calculate My Score & Entry
+  // Effect to fetch Friends, Incoming, and Outgoing data
+  useEffect(() => {
+      const fetchAllSocialData = async () => {
+          if (!user || !db || isDemoUser) return;
+          
+          // 1. Friends Leaderboard (Confirmed Only)
+          const friendsEntries = await fetchUserProfiles(friendIds);
+          
+          // Add Me
           const currentUserTotal = history.reduce((acc, h) => acc + (h.score || 0), 0) + score;
           const meEntry: LeaderboardEntry = {
               id: user.id,
@@ -374,56 +497,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               score: currentUserTotal,
               avatar: user.photoUrl,
               isCurrentUser: true,
-              rank: 1
+              rank: 1,
+              email: user.email
           };
 
-          // 2. If No Friends, set Leaderboard to just Me
-          if (friendIds.length === 0) {
-              setFriendsLeaderboard([meEntry]);
-              return;
-          }
+          const allFriends = [...friendsEntries, meEntry].sort((a, b) => b.score - a.score);
+          const rankedFriends = allFriends.map((u, i) => ({ ...u, rank: i + 1 }));
+          setFriendsLeaderboard(rankedFriends);
 
-          try {
-              // 3. Fetch Friends from Firestore
-              // Note: Firestore 'in' query supports max 10 values. For MVP simple loop is ok.
-              const friendsDataPromises = friendIds.map(fid => getDoc(doc(db, 'users', fid)));
-              const snapshots = await Promise.all(friendsDataPromises);
-              
-              const friendsEntries: LeaderboardEntry[] = [];
-              
-              snapshots.forEach(snap => {
-                  if (snap.exists()) {
-                      const d = snap.data();
-                      // Calculate total score from history + current score
-                      const totalH = (d.history || []).reduce((acc: number, h: HistoryData) => acc + (h.score || 0), 0);
-                      const total = totalH + (d.score || 0);
+          // 2. Incoming Requests
+          const incomingEntries = await fetchUserProfiles(incomingIds);
+          setIncomingRequests(incomingEntries);
 
-                      friendsEntries.push({
-                          id: snap.id,
-                          name: d.name || 'Teman',
-                          score: total,
-                          avatar: d.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${d.email}`,
-                          isCurrentUser: false,
-                          rank: 0
-                      });
-                  }
-              });
-
-              // 4. Combine Me + Friends, Sort, and Rank
-              const all = [...friendsEntries, meEntry].sort((a, b) => b.score - a.score);
-              const ranked = all.map((u, i) => ({ ...u, rank: i + 1 }));
-              
-              setFriendsLeaderboard(ranked);
-
-          } catch (e) {
-              console.error("Error fetching friends leaderboard", e);
-              // Fallback to just me if fetch fails
-              setFriendsLeaderboard([meEntry]);
-          }
+          // 3. Outgoing Requests
+          const outgoingEntries = await fetchUserProfiles(outgoingIds);
+          setOutgoingRequests(outgoingEntries);
       };
 
-      fetchFriendsData();
-  }, [friendIds, score, history, user, isDemoUser]); // Refetch when my score changes or friend list changes
+      fetchAllSocialData();
+  }, [friendIds, incomingIds, outgoingIds, score, history, user, isDemoUser]);
 
 
   // Sync data from Firestore
@@ -431,13 +523,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     if (!db || user.id === 'mock-user-123') {
         checkDailyReset(INITIAL_TASKS, 0, [], 'puasa', '', 0, {}); 
-        // Mock Friends - ONLY FOR DEMO USER
+        // Mock Friends - Demo User
         const mockFriends = [
             { id: 'f1', name: 'Ayah', score: 1500, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ayah', isCurrentUser: false, rank: 1 },
             { id: 'me', name: 'Saya', score: 1200, avatar: user.photoUrl, isCurrentUser: true, rank: 2 },
-            { id: 'f2', name: 'Ibu', score: 1100, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ibu', isCurrentUser: false, rank: 3 },
         ];
         setFriendsLeaderboard(mockFriends);
+        setIncomingRequests([{ id: 'req1', name: 'Budi Santoso', score: 0, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Budi', isCurrentUser: false, rank: 0 }]);
+        setOutgoingRequests([]);
         return;
     }
 
@@ -452,7 +545,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const fetchedDate = data.lastRecordedDate || '';
             const fetchedPages = data.pagesReadToday || 0;
             const fetchedDzikir = data.dzikirCounts || {};
-            const fetchedFriends = data.friends || [];
+            
+            // Social Arrays
+            const fIds = data.friends || [];
+            const incIds = data.friendRequestsIncoming || [];
+            const outIds = data.friendRequestsOutgoing || [];
 
             if (data.themeId) setCurrentThemeId(data.themeId);
             if (data.quranProgress) setQuranProgress(data.quranProgress);
@@ -464,20 +561,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (data.prayerCorrections) setPrayerCorrectionsState(data.prayerCorrections);
             if (data.achievements) setAchievements(data.achievements);
             
-            // Set Friend IDs for fetching detail
-            setFriendIds(fetchedFriends);
+            // Update IDs state (triggers the other useEffect to fetch profiles)
+            setFriendIds(fIds);
+            setIncomingIds(incIds);
+            setOutgoingIds(outIds);
 
             checkDailyReset(fetchedTasks, fetchedScore, fetchedHistory, fetchedFasting, fetchedDate, fetchedPages, fetchedDzikir);
 
         } else {
             const today = new Date().toISOString().split('T')[0];
             setLastRecordedDate(today);
-            // Save initial user doc including empty friends array and email for searching
+            // Save initial user doc
             setDoc(userRef, {
                 email: user.email,
                 name: user.name,
                 photoUrl: user.photoUrl,
                 friends: [],
+                friendRequestsIncoming: [],
+                friendRequestsOutgoing: [],
                 tasks: INITIAL_TASKS,
                 score: 0,
                 fastingStatus: 'puasa',
@@ -947,7 +1048,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         achievements,
         
         friendsLeaderboard,
+        incomingRequests,
+        outgoingRequests,
+        
         addFriendByEmail,
+        acceptFriend,
+        rejectFriend,
+        removeFriend,
         updateDisplayName,
 
         newlyUnlockedAchievement,
