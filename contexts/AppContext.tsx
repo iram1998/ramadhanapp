@@ -92,7 +92,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [prayerCorrections, setPrayerCorrectionsState] = useState<PrayerCorrections>({});
 
   // Ramadhan Settings
-  const [ramadhanStartDate, setRamadhanStartDateState] = useState<string>('2026-02-18');
+  const [ramadhanStartDate, setRamadhanStartDateState] = useState<string>('2026-02-19'); // Default 19th based on prompt
   
   const currentRamadhanDay = calculateRamadhanDay(ramadhanStartDate, timezone);
 
@@ -256,7 +256,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         } else {
             const today = new Date().toISOString().split('T')[0];
             setLastRecordedDate(today);
-            saveDataToFirestore(INITIAL_TASKS, 0, 'puasa', 'gold-green', quranProgress, null, '2026-02-18', [], today, 0, {}, 'id', false, false, {});
+            saveDataToFirestore(INITIAL_TASKS, 0, 'puasa', 'gold-green', quranProgress, null, '2026-02-19', [], today, 0, {}, 'id', false, false, {});
         }
     }, (error) => {
         console.error("Firestore listener error:", error);
@@ -265,13 +265,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, [user]);
 
-  // --- NOTIFICATION & AUDIO LOGIC (UPDATED FOR TIMEZONE) ---
+  // --- NOTIFICATION & AUDIO LOGIC ---
   useEffect(() => {
       // Logic runs every 30 seconds
       if (prayerTimes.length === 0) return;
 
       const checkInterval = setInterval(() => {
-          // Get "Now" in location's timezone
           const nowInZone = new Date().toLocaleString('en-US', { timeZone: timezone, hour12: false });
           const zoneDate = new Date(nowInZone);
           const currentHour = String(zoneDate.getHours()).padStart(2, '0');
@@ -285,7 +284,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                console.log("Prayer time matched:", match.name);
                setLastNotificationTime(currentTimeStr);
                
-               // 1. Browser Notification
                if (notificationsEnabled && Notification.permission === 'granted') {
                    new Notification(`Waktu ${match.name} Telah Tiba`, {
                        body: `Selamat menunaikan ibadah sholat ${match.name}.`,
@@ -294,7 +292,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                    });
                }
 
-               // 2. Play Audio Adzan
                if (audioEnabled && audioRef.current && !isPlaying) {
                    audioRef.current.currentTime = 0;
                    audioRef.current.play()
@@ -383,14 +380,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
           const schedule = await getPrayerTimes(lat, long);
           
-          // Apply Corrections
           const applyOffset = (time: string, id: string) => {
               const offset = prayerCorrections[id] || 0;
               return offset === 0 ? time : addMinutesToTime(time, offset);
           };
 
           const fullList: PrayerTime[] = [
-              { name: 'Imsak', time: applyOffset(schedule.imsak, 'subuh'), isNext: false }, // Apply subuh offset to Imsak too generally
+              { name: 'Imsak', time: applyOffset(schedule.imsak, 'subuh'), isNext: false }, 
               ...schedule.list.map(p => ({
                   name: p.name,
                   time: applyOffset(p.time, p.id),
@@ -398,17 +394,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               }))
           ];
           
-          // Update schedule map with corrected times
-          const correctedSchedule: Record<string, string> = {};
-          Object.keys(schedule.times).forEach(key => {
-             // Basic mapping, assuming standard keys 'subuh', 'dzuhur' etc match correction keys
-             // Note: aladhan keys are PascalCase (Fajr, Dhuhr) but our app uses lowercase IDs
-             // We'll rely on our mapped 'list' for display mainly.
-             // But for the 'times' dictionary used in Tracker, we need to be careful.
-             // Simpler approach: reconstruct dictionary from fullList
-          });
-
-          // Re-evaluate 'next prayer' based on corrected times
           const nowInZone = new Date().toLocaleString('en-US', { timeZone: schedule.timezone, hour12: false });
           const zoneDate = new Date(nowInZone);
           const currentHour = String(zoneDate.getHours()).padStart(2, '0');
@@ -416,13 +401,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           const currentTimeStr = `${currentHour}:${currentMinute}`;
           
           let nextP = fullList.find(p => p.time > currentTimeStr && p.name !== 'Imsak');
-          if (!nextP) nextP = fullList.find(p => p.name !== 'Imsak'); // Wrap to Fajr next day
+          if (!nextP) nextP = fullList.find(p => p.name !== 'Imsak'); 
           
           if(nextP) nextP.isNext = true;
 
           setPrayerTimes(fullList);
           
-          // Update dictionary for easier access in Tracker
           const timesDict: Record<string, string> = {
               imsak: applyOffset(schedule.imsak, 'subuh'),
               subuh: applyOffset(schedule.times.subuh, 'subuh'),
@@ -442,15 +426,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               });
           }
           setLocation(locName || schedule.locationName);
-          setTimezone(schedule.timezone); // Update Timezone
+          setTimezone(schedule.timezone);
       } catch (e) {
           console.error("Failed to load prayers:", e);
       }
   };
 
+  // --- UPDATED EFFECT: HIJRI DATE BASED ON SETTINGS ---
   useEffect(() => {
-    setHijriDate(getHijriDate(timezone));
+    // 1. Calculate Hijri Text: If within Ramadhan (1-30 days) relative to start date, use that count.
+    // Otherwise fallback to standard calendar.
+    if (currentRamadhanDay >= 1 && currentRamadhanDay <= 30) {
+         setHijriDate(`${currentRamadhanDay} Ramadhan 1447H`);
+    } else {
+         setHijriDate(getHijriDate(timezone));
+    }
     
+    // 2. Fetch Prayers based on location
     if (manualLocation) {
         fetchPrayers(manualLocation.lat, manualLocation.lon, manualLocation.name);
     } else {
@@ -463,7 +455,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             fetchPrayers(-6.1702, 106.8310, "Jakarta (Default)");
         }
     }
-  }, [manualLocation, timezone, prayerCorrections]); // Dependencies updated
+  }, [manualLocation, timezone, prayerCorrections, currentRamadhanDay]); // Added currentRamadhanDay as dependency
 
   const refreshLocation = () => {
        if (manualLocation) {
