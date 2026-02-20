@@ -112,30 +112,54 @@ const ActivityChart = ({ history, tasks, primaryColor }: { history: any[], tasks
 };
 
 export const Dashboard = () => {
-  const { theme, score, location, nextPrayer, hijriDate, tasks, history, quranProgress, t } = useApp();
+  const { theme, score, location, timezone, nextPrayer, hijriDate, tasks, history, quranProgress, t } = useApp();
   const { user } = useAuth();
   
   // State for Countdown
   const [timeLeft, setTimeLeft] = useState<string>('--:--:--');
   const [randomHadith, setRandomHadith] = useState(HADITHS[0]);
+  const [locationTime, setLocationTime] = useState<string>('');
 
-  // --- 1. COUNTDOWN LOGIC ---
+  // --- 1. CLOCK & COUNTDOWN LOGIC (TIMEZONE AWARE) ---
   useEffect(() => {
     // Pick random hadith on mount
     setRandomHadith(HADITHS[Math.floor(Math.random() * HADITHS.length)]);
 
-    if (!nextPrayer) return;
-
     const timer = setInterval(() => {
-        const now = new Date();
+        // 1. Get current time in the LOCATION'S timezone
+        const nowString = new Date().toLocaleString('en-US', { timeZone: timezone });
+        const now = new Date(nowString); // "Now" as a Date object in that zone
+
+        // Update Location Clock Display
+        // Use 'en-GB' to ensure HH:MM:SS format (with colons)
+        setLocationTime(new Intl.DateTimeFormat('en-GB', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit',
+            timeZone: timezone 
+        }).format(new Date()));
+
+        if (!nextPrayer) {
+            setTimeLeft("00:00:00");
+            return;
+        }
+
+        // 2. Parse Next Prayer Time
         const [h, m] = nextPrayer.time.split(':').map(Number);
-        const target = new Date();
+        
+        // Create Target Date based on "Now" year/month/day but prayer hours
+        const target = new Date(now); 
         target.setHours(h, m, 0, 0);
 
+        // If target is earlier than now (in that zone), it means the prayer is tomorrow
+        // (This happens if we haven't updated 'nextPrayer' to tomorrow's list yet, 
+        // OR if simple comparison shows passed. But usually 'nextPrayer' from utils comes correct.)
+        // However, since we reconstructed 'target' using today's date, we must check:
         if (target.getTime() < now.getTime()) {
              target.setDate(target.getDate() + 1);
         }
 
+        // 3. Calculate Diff
         const diff = target.getTime() - now.getTime();
 
         if (diff <= 0) {
@@ -152,7 +176,7 @@ export const Dashboard = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [nextPrayer]);
+  }, [nextPrayer, timezone]);
 
   // --- 2. STATS CALCULATION ---
   const streakCount = history.length + (score > 0 ? 1 : 0);
@@ -201,9 +225,18 @@ export const Dashboard = () => {
                         </h2>
                     </div>
                     
-                    <div className="inline-flex items-center gap-2 mt-2 bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
-                        <span className="material-symbols-outlined text-xs">alarm</span>
-                        <span className="text-xs font-bold">{displayPrayer.time}</span>
+                    <div className="flex items-center gap-3 mt-3">
+                        <div className="inline-flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
+                            <span className="material-symbols-outlined text-xs">alarm</span>
+                            <span className="text-xs font-bold">{displayPrayer.time}</span>
+                        </div>
+                        {/* Live Clock Display */}
+                        <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full backdrop-blur-sm border border-white/10">
+                            <span className="material-symbols-outlined text-xs">schedule</span>
+                            <div className="flex flex-col leading-none">
+                                <span className="text-xs font-mono opacity-80 font-bold">{locationTime || '--:--:--'}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

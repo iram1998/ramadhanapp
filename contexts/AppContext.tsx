@@ -45,6 +45,7 @@ interface AppContextType {
   currentRamadhanDay: number;
   isInstallable: boolean;
   installApp: () => void;
+  timezone: string;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -80,6 +81,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Prayer Times State
   const [location, setLocation] = useState('Detecting...');
+  const [timezone, setTimezone] = useState('Asia/Jakarta');
   const [manualLocation, setManualLocationState] = useState<{ name: string; lat: number; lon: number } | null>(null);
   const [prayerTimes, setPrayerTimes] = useState<PrayerTime[]>([]);
   const [prayerSchedule, setPrayerSchedule] = useState<Record<string, string>>({});
@@ -88,7 +90,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   // Ramadhan Settings
   const [ramadhanStartDate, setRamadhanStartDateState] = useState<string>('2026-02-18');
-  const currentRamadhanDay = calculateRamadhanDay(ramadhanStartDate);
+  
+  // UPDATED: Calculate day using Timezone (for "Today" dashboard)
+  const currentRamadhanDay = calculateRamadhanDay(ramadhanStartDate, timezone);
 
   const [quranProgress, setQuranProgress] = useState<QuranProgress>({
     currentJuz: 1,
@@ -256,15 +260,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, [user]);
 
-  // --- NOTIFICATION & AUDIO LOGIC ---
+  // --- NOTIFICATION & AUDIO LOGIC (UPDATED FOR TIMEZONE) ---
   useEffect(() => {
       // Logic runs every 30 seconds
       if (prayerTimes.length === 0) return;
 
       const checkInterval = setInterval(() => {
-          const now = new Date();
-          const currentHour = String(now.getHours()).padStart(2, '0');
-          const currentMinute = String(now.getMinutes()).padStart(2, '0');
+          // Get "Now" in location's timezone
+          const nowInZone = new Date().toLocaleString('en-US', { timeZone: timezone, hour12: false });
+          // Extract HH:MM
+          // Format usually "M/D/YYYY, HH:MM:SS" or similar depending on locale, safer to use format parts or split
+          // Let's use Date object from the string
+          const zoneDate = new Date(nowInZone);
+          const currentHour = String(zoneDate.getHours()).padStart(2, '0');
+          const currentMinute = String(zoneDate.getMinutes()).padStart(2, '0');
           const currentTimeStr = `${currentHour}:${currentMinute}`;
           
           if (lastNotificationTime === currentTimeStr) return;
@@ -294,7 +303,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }, 30000); 
 
       return () => clearInterval(checkInterval);
-  }, [notificationsEnabled, audioEnabled, prayerTimes, lastNotificationTime, isPlaying]);
+  }, [notificationsEnabled, audioEnabled, prayerTimes, lastNotificationTime, isPlaying, timezone]);
 
   // --- DAILY RESET LOGIC WITH GAP FILLING ---
   const checkDailyReset = (
@@ -391,13 +400,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               });
           }
           setLocation(locName || schedule.locationName);
+          setTimezone(schedule.timezone); // Update Timezone
       } catch (e) {
           console.error("Failed to load prayers:", e);
       }
   };
 
   useEffect(() => {
-    setHijriDate(getHijriDate());
+    // Update Hijri Date whenever timezone changes
+    setHijriDate(getHijriDate(timezone));
+    
     if (manualLocation) {
         fetchPrayers(manualLocation.lat, manualLocation.lon, manualLocation.name);
     } else {
@@ -410,7 +422,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             fetchPrayers(-6.1702, 106.8310, "Jakarta (Default)");
         }
     }
-  }, [manualLocation]);
+  }, [manualLocation, timezone]); // Added timezone dep
 
   const refreshLocation = () => {
        if (manualLocation) {
@@ -564,7 +576,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setRamadhanStartDate,
         currentRamadhanDay,
         isInstallable,
-        installApp
+        installApp,
+        timezone
       }}
     >
       {children}

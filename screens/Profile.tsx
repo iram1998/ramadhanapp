@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { THEMES } from '../constants';
@@ -39,6 +39,20 @@ export const Profile = () => {
   
   // Date Picker State
   const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // iOS Detection for Install Instructions
+  const [isIOS, setIsIOS] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+      // Check if iOS
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      setIsIOS(ios);
+
+      // Check if already installed (Standalone mode)
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      setIsStandalone(standalone);
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -87,7 +101,9 @@ export const Profile = () => {
         </header>
 
         <main className="p-6 space-y-8">
-            {/* Install PWA Prompt (Only if installable) */}
+            {/* PWA INSTALLATION SECTION */}
+            
+            {/* 1. Android / Chrome Desktop Button */}
             {isInstallable && (
                 <div className="bg-[var(--color-primary)]/5 border border-[var(--color-primary)]/20 rounded-xl p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -105,6 +121,26 @@ export const Profile = () => {
                     >
                         Install
                     </button>
+                </div>
+            )}
+
+            {/* 2. iOS Instructions (Show if on iOS and NOT already installed) */}
+            {isIOS && !isStandalone && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="size-10 bg-gray-200 rounded-lg flex items-center justify-center text-gray-600">
+                             <span className="material-symbols-outlined">ios_share</span>
+                        </div>
+                        <div>
+                             <p className="font-bold text-sm">Install di iPhone/iPad</p>
+                             <p className="text-xs opacity-60">Ikuti langkah berikut:</p>
+                         </div>
+                    </div>
+                    <ol className="text-xs opacity-80 list-decimal list-inside space-y-1 ml-1">
+                        <li>Klik tombol <strong>Share</strong> (ikon kotak panah) di bar bawah Safari.</li>
+                        <li>Scroll ke bawah dan pilih <strong>"Add to Home Screen"</strong> (Tambah ke Layar Utama).</li>
+                        <li>Klik <strong>Add</strong> di pojok kanan atas.</li>
+                    </ol>
                 </div>
             )}
 

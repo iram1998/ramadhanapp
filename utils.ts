@@ -1,12 +1,14 @@
+
 // Utilities for Ramadhan Tracker
 
-// --- Hijri Date Helper ---
-export const getHijriDate = (): string => {
+// --- Hijri Date Helper (Timezone Aware) ---
+export const getHijriDate = (timezone: string = 'Asia/Jakarta'): string => {
   try {
-    return new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+    return new Intl.DateTimeFormat('id-ID-u-ca-islamic-umalqura', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
+      timeZone: timezone
     }).format(new Date());
   } catch (e) {
     return "Ramadhan 1447H";
@@ -15,12 +17,13 @@ export const getHijriDate = (): string => {
 
 // --- Prayer Time Types ---
 export interface PrayerSchedule {
-  list: { name: string; time: string; raw: Date; id: string; isNext: boolean }[];
-  next: { name: string; time: string; raw: Date; id: string; isNext: boolean } | undefined;
+  list: { name: string; time: string; id: string; isNext: boolean }[];
+  next: { name: string; time: string; id: string; isNext: boolean } | undefined;
   imsak: string;
   sunrise: string;
   dhuha: string; // Calculated
   locationName: string;
+  timezone: string; // New: IANA Timezone string
   times: Record<string, string>; // Raw dictionary for easy lookup
 }
 
@@ -30,18 +33,24 @@ export interface CityResult {
     lon: number;
 }
 
-// Helper to format time string "HH:MM" to Date object for today
-const timeStringToDate = (timeStr: string): Date => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return date;
+// Helper: Get Current Date Object shifted to specific Timezone
+// This allows us to compare "Now" in that location vs Prayer Time strings
+export const getCurrentTimeInZone = (timezone: string): Date => {
+    try {
+        // Create a date string in the target timezone (e.g., "2/18/2026, 10:00:00 AM")
+        const str = new Date().toLocaleString('en-US', { timeZone: timezone });
+        return new Date(str);
+    } catch (e) {
+        // Fallback to local time if timezone is invalid
+        return new Date();
+    }
 };
 
 // Helper to add minutes to a time string "HH:MM"
 const addMinutesToTime = (timeStr: string, minutesToAdd: number): string => {
-    const date = timeStringToDate(timeStr);
-    date.setMinutes(date.getMinutes() + minutesToAdd);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes + minutesToAdd, 0, 0);
     const h = String(date.getHours()).padStart(2, '0');
     const m = String(date.getMinutes()).padStart(2, '0');
     return `${h}:${m}`;
@@ -63,7 +72,10 @@ export const getPrayerTimes = async (latitude: number, longitude: number): Promi
         if (data.code !== 200) throw new Error("Failed to fetch timings");
 
         const timings = data.data.timings;
-        const now = new Date();
+        const timezone = data.data.meta.timezone || "Asia/Jakarta"; // Default fallback
+        
+        // "Now" in the target timezone
+        const nowInZone = getCurrentTimeInZone(timezone);
 
         // Calculate Dhuha (Approx 20 mins after Sunrise/Syuruq)
         const dhuhaTime = addMinutesToTime(timings.Sunrise, 20);
@@ -71,50 +83,43 @@ export const getPrayerTimes = async (latitude: number, longitude: number): Promi
         // Map API response to our app structure
         const rawPrayers = [
             { id: 'subuh', name: 'Subuh', time: timings.Fajr },
-            { id: 'dhuha', name: 'Dhuha', time: dhuhaTime }, // Added Dhuha
+            { id: 'dhuha', name: 'Dhuha', time: dhuhaTime },
             { id: 'dzuhur', name: 'Dzuhur', time: timings.Dhuhr },
             { id: 'ashar', name: 'Ashar', time: timings.Asr },
             { id: 'maghrib', name: 'Maghrib', time: timings.Maghrib },
             { id: 'isya', name: 'Isya', time: timings.Isha },
         ];
 
+        // Format current time as HH:MM for string comparison
+        const currentH = String(nowInZone.getHours()).padStart(2, '0');
+        const currentM = String(nowInZone.getMinutes()).padStart(2, '0');
+        const currentTimeStr = `${currentH}:${currentM}`;
+
+        // Find Next Prayer
+        const foundPrayer = rawPrayers.find(p => p.time > currentTimeStr);
+        
+        // If found, use it. If not, next is Subuh (index 0) tomorrow.
+        const nextPrayerBase = foundPrayer || rawPrayers[0];
+        
+        // Construct the full next prayer object with isNext flag
+        const nextPrayer = {
+            ...nextPrayerBase,
+            isNext: true
+        };
+
         const list = rawPrayers.map(p => ({
             ...p,
-            raw: timeStringToDate(p.time),
-            isNext: false
+            isNext: p.id === nextPrayer.id
         }));
-
-        // Determine Next Prayer
-        let nextPrayer = list.find(p => p.raw > now);
-        
-        // If all prayers passed today, next is Fajr tomorrow
-        if (!nextPrayer) {
-            const tomorrowFajr = new Date(list[0].raw);
-            tomorrowFajr.setDate(tomorrowFajr.getDate() + 1);
-            nextPrayer = { 
-                ...list[0], 
-                raw: tomorrowFajr,
-                isNext: true 
-            };
-        } else {
-            nextPrayer.isNext = true;
-        }
-
-        // Update list 'isNext' status
-        const finalList = list.map(p => ({
-            ...p,
-            isNext: p.id === nextPrayer?.id
-        }));
-
-        const timezone = data.data.meta.timezone || "Detected Location";
 
         return {
-            list: finalList,
+            list: list,
             next: nextPrayer,
             imsak: timings.Imsak,
             sunrise: timings.Sunrise,
             dhuha: dhuhaTime,
             locationName: timezone.split('/')[1]?.replace('_', ' ') || "My Location",
+            timezone: timezone,
             times: {
                 imsak: timings.Imsak,
                 subuh: timings.Fajr,
@@ -136,10 +141,8 @@ export const getPrayerTimes = async (latitude: number, longitude: number): Promi
 // Updated to accept month and year explicitly
 export const getMonthlyPrayerTimes = async (latitude: number, longitude: number, month: number, year: number): Promise<any[]> => {
     try {
-        // Aladhan API expects month (1-12) and year (YYYY)
         const response = await fetch(`https://api.aladhan.com/v1/calendar/${year}/${month}?latitude=${latitude}&longitude=${longitude}&method=20`);
         const data = await response.json();
-        
         if (data.code !== 200) return [];
         return data.data;
     } catch (error) {
@@ -148,15 +151,14 @@ export const getMonthlyPrayerTimes = async (latitude: number, longitude: number,
     }
 };
 
-// --- Search City API (Nominatim) ---
+// --- Search City API ---
 export const searchCity = async (query: string): Promise<CityResult[]> => {
     if (!query || query.length < 3) return [];
     try {
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`);
         const data = await response.json();
-        
         return data.map((item: any) => ({
-            name: item.display_name.split(',')[0] + ', ' + (item.address.city || item.address.state || item.address.country), // Simplifikasi nama
+            name: item.display_name.split(',')[0] + ', ' + (item.address.city || item.address.state || item.address.country),
             lat: parseFloat(item.lat),
             lon: parseFloat(item.lon)
         }));
@@ -166,20 +168,35 @@ export const searchCity = async (query: string): Promise<CityResult[]> => {
     }
 };
 
-// --- Ramadhan Day Calculator ---
-export const calculateRamadhanDay = (startDateStr: string, checkDateStr?: string): number => {
+/**
+ * Ramadhan Day Calculator (Hybrid: Date-based OR Timezone-based)
+ * @param startDateStr - Tanggal 1 Ramadhan (YYYY-MM-DD)
+ * @param dateOrTimezone - BISA berupa string Tanggal (YYYY-MM-DD) ATAU string Timezone (Asia/Jakarta)
+ */
+export const calculateRamadhanDay = (startDateStr: string, dateOrTimezone: string = 'Asia/Jakarta'): number => {
     if (!startDateStr) return 1;
     
     const start = new Date(startDateStr);
-    const check = checkDateStr ? new Date(checkDateStr) : new Date();
+    start.setHours(0, 0, 0, 0);
+
+    let check: Date;
     
-    // Reset hours to compare dates only
-    start.setHours(0,0,0,0);
-    check.setHours(0,0,0,0);
-    
+    // Cek apakah parameter kedua adalah Tanggal (format YYYY-MM-DD atau DD-MM-YYYY)
+    // Timezone (Asia/Jakarta) biasanya akan menghasilkan Invalid Date atau NaN jika diparse langsung tanpa konteks,
+    // atau kita cek karakter "/" dan "-" untuk membedakan.
+    const isDateString = !isNaN(Date.parse(dateOrTimezone)) && (dateOrTimezone.includes('-') || dateOrTimezone.includes('/')) && !dateOrTimezone.includes('Asia') && !dateOrTimezone.includes('GMT');
+
+    if (isDateString) {
+        // Kasus: Menghitung hari untuk baris tabel jadwal (Tracker.tsx)
+        check = new Date(dateOrTimezone);
+    } else {
+        // Kasus: Menghitung hari "Hari Ini" berdasarkan jam lokasi (Dashboard / Context)
+        check = getCurrentTimeInZone(dateOrTimezone);
+    }
+
+    check.setHours(0, 0, 0, 0);
     const diffTime = check.getTime() - start.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
     
-    // Day 1 is the start date itself, so +1.
     return diffDays + 1;
 };
