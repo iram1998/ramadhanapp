@@ -206,3 +206,201 @@ export const calculateRamadhanDay = (startDateStr: string, dateOrTimezone: strin
     
     return diffDays + 1;
 };
+
+// --- QURAN API FUNCTIONS (Added) ---
+
+// Helper Clean Bismillah
+const cleanAyahText = (text: string, surahNumber: number, numberInSurah: number) => {
+    // If Surah is NOT Al-Fatihah (1) AND NOT At-Tawbah (9), and it's Ayah 1
+    if (surahNumber !== 1 && surahNumber !== 9 && numberInSurah === 1) {
+        const basmalahVariations = [
+            "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
+            "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ", 
+            "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ",
+            "بسم الله الرحمن الرحيم"
+        ];
+
+        for (const prefix of basmalahVariations) {
+            if (text.startsWith(prefix)) {
+                return text.slice(prefix.length).trim();
+            }
+        }
+    }
+    return text;
+};
+
+// 1. Get List of Surahs
+export const getSurahList = async (): Promise<any[]> => {
+    const cacheKey = 'quran_surah_list';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        return JSON.parse(cached);
+    }
+    try {
+        const response = await fetch('https://api.alquran.cloud/v1/surah');
+        const json = await response.json();
+        if (json.code === 200) {
+            localStorage.setItem(cacheKey, JSON.stringify(json.data));
+            return json.data;
+        }
+        return [];
+    } catch (e) {
+        console.error("Failed to fetch surah list", e);
+        return [];
+    }
+}
+
+// 2. Get Surah Details (Arabic + Translation + Audio)
+export const getSurahDetail = async (surahNumber: number): Promise<any> => {
+    const cacheKey = `quran_surah_${surahNumber}_v2`; 
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    try {
+        const response = await fetch(`https://api.alquran.cloud/v1/surah/${surahNumber}/editions/quran-uthmani,id.indonesian,ar.alafasy`);
+        const json = await response.json();
+        
+        if (json.code === 200 && json.data.length >= 3) {
+            const arabicData = json.data[0];
+            const transData = json.data[1];
+            const audioData = json.data[2];
+
+            const mergedAyahs = arabicData.ayahs.map((ayah: any, index: number) => ({
+                ...ayah,
+                text: cleanAyahText(ayah.text, surahNumber, ayah.numberInSurah),
+                translation: transData.ayahs[index] ? transData.ayahs[index].text : '',
+                audio: audioData.ayahs[index] ? audioData.ayahs[index].audio : '',
+            }));
+            
+            const result = { ...arabicData, ayahs: mergedAyahs };
+            try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch (e) {}
+            return result;
+        }
+        return null;
+    } catch (e) {
+        console.error("Failed getSurahDetail", e);
+        return null;
+    }
+}
+
+// 3. Get Juz Details (Arabic + Translation + Audio)
+export const getJuzDetail = async (juzNumber: number): Promise<any> => {
+    const cacheKey = `quran_juz_${juzNumber}_v3`; // Cache Key v3
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    try {
+        // Fetch Arabic, Translation, and Audio independently in parallel
+        // because /editions/ endpoint is not supported for Juz
+        const [arabicRes, transRes, audioRes] = await Promise.all([
+            fetch(`https://api.alquran.cloud/v1/juz/${juzNumber}/quran-uthmani`),
+            fetch(`https://api.alquran.cloud/v1/juz/${juzNumber}/id.indonesian`),
+            fetch(`https://api.alquran.cloud/v1/juz/${juzNumber}/ar.alafasy`)
+        ]);
+
+        const arabicJson = await arabicRes.json();
+        const transJson = await transRes.json();
+        const audioJson = await audioRes.json();
+        
+        if (arabicJson.code === 200 && transJson.code === 200 && audioJson.code === 200) {
+            const arabicData = arabicJson.data;
+            const transData = transJson.data;
+            const audioData = audioJson.data;
+            
+            const mergedAyahs = arabicData.ayahs.map((ayah: any, index: number) => {
+                const surahNum = ayah.surah ? ayah.surah.number : 0;
+                
+                // Safety check for indices
+                const translation = transData.ayahs[index] ? transData.ayahs[index].text : '';
+                const audio = audioData.ayahs[index] ? audioData.ayahs[index].audio : '';
+
+                return {
+                    ...ayah,
+                    text: cleanAyahText(ayah.text, surahNum, ayah.numberInSurah),
+                    translation: translation,
+                    audio: audio,
+                    surah: ayah.surah // Preserve surah info for headers
+                };
+            });
+
+            const result = { ...arabicData, ayahs: mergedAyahs };
+            try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch (e) {}
+            return result;
+        }
+        return null;
+    } catch (e) {
+        console.error("Failed getJuzDetail", e);
+        return null;
+    }
+}
+
+// 4. Get Page Details (Arabic + Translation + Audio)
+export const getPageDetail = async (pageNumber: number): Promise<any> => {
+    const cacheKey = `quran_page_${pageNumber}_v3`; // Cache Key v3
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    try {
+        // Fetch Arabic, Translation, and Audio independently in parallel
+        // because /editions/ endpoint is not supported for Page
+        const [arabicRes, transRes, audioRes] = await Promise.all([
+            fetch(`https://api.alquran.cloud/v1/page/${pageNumber}/quran-uthmani`),
+            fetch(`https://api.alquran.cloud/v1/page/${pageNumber}/id.indonesian`),
+            fetch(`https://api.alquran.cloud/v1/page/${pageNumber}/ar.alafasy`)
+        ]);
+
+        const arabicJson = await arabicRes.json();
+        const transJson = await transRes.json();
+        const audioJson = await audioRes.json();
+        
+        if (arabicJson.code === 200 && transJson.code === 200 && audioJson.code === 200) {
+            const arabicData = arabicJson.data;
+            const transData = transJson.data;
+            const audioData = audioJson.data;
+            
+            const mergedAyahs = arabicData.ayahs.map((ayah: any, index: number) => {
+                const surahNum = ayah.surah ? ayah.surah.number : 0;
+                
+                const translation = transData.ayahs[index] ? transData.ayahs[index].text : '';
+                const audio = audioData.ayahs[index] ? audioData.ayahs[index].audio : '';
+
+                return {
+                    ...ayah,
+                    text: cleanAyahText(ayah.text, surahNum, ayah.numberInSurah),
+                    translation: translation,
+                    audio: audio,
+                    surah: ayah.surah // Preserve surah info for headers
+                };
+            });
+
+            const result = { ...arabicData, ayahs: mergedAyahs };
+            try { localStorage.setItem(cacheKey, JSON.stringify(result)); } catch (e) {}
+            return result;
+        }
+        return null;
+    } catch (e) {
+        console.error("Failed getPageDetail", e);
+        return null;
+    }
+}
+
+
+// --- QIBLA CALCULATION ---
+export const calculateQiblaDirection = (lat: number, lon: number): number => {
+    // Kaaba Coordinates
+    const kaabaLat = 21.422487;
+    const kaabaLon = 39.826206;
+
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const toDeg = (rad: number) => (rad * 180) / Math.PI;
+
+    const lat1 = toRad(lat);
+    const lat2 = toRad(kaabaLat);
+    const dLon = toRad(kaabaLon - lon);
+
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    let bearing = toDeg(Math.atan2(y, x));
+    return (bearing + 360) % 360; // Normalize to 0-360
+};

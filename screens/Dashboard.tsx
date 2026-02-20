@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Task } from '../types';
+import { Task, Article } from '../types';
+import { ARTICLES } from '../constants';
 
 // --- DATA HADITS ---
 const HADITHS = [
@@ -111,14 +112,43 @@ const ActivityChart = ({ history, tasks, primaryColor }: { history: any[], tasks
     );
 };
 
+// --- NEW COMPONENT: ARTICLE CARD ---
+const ArticleCard = ({ article }: { article: Article }) => (
+    <div className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-primary)]/10 overflow-hidden shadow-sm flex flex-col hover:border-[var(--color-primary)]/30 transition-all cursor-pointer">
+        <div className="relative h-32 bg-gray-100">
+            {article.image && (
+                <img src={article.image} alt={article.title} className="w-full h-full object-cover" />
+            )}
+            <div className="absolute top-2 left-2 bg-[var(--color-primary)] text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
+                {article.category}
+            </div>
+        </div>
+        <div className="p-4 flex flex-col gap-2">
+            <h3 className="font-bold text-base leading-tight line-clamp-2">{article.title}</h3>
+            <p className="text-xs opacity-60 line-clamp-2">{article.excerpt}</p>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                <span className="text-[10px] font-bold opacity-40">{article.author}</span>
+                <span className="text-[10px] font-bold text-[var(--color-primary)] flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[10px]">schedule</span>
+                    {article.readTime}
+                </span>
+            </div>
+        </div>
+    </div>
+);
+
 export const Dashboard = () => {
-  const { theme, score, location, timezone, nextPrayer, hijriDate, tasks, history, quranProgress, t } = useApp();
+  const { theme, score, location, timezone, nextPrayer, hijriDate, tasks, history, quranProgress, t, leaderboard } = useApp();
   const { user } = useAuth();
   
   // State for Countdown
   const [timeLeft, setTimeLeft] = useState<string>('--:--:--');
   const [randomHadith, setRandomHadith] = useState(HADITHS[0]);
   const [locationTime, setLocationTime] = useState<string>('');
+  
+  // Article Rotation Logic (Simple day-based)
+  const todayIndex = new Date().getDate() % ARTICLES.length;
+  const dailyArticle = ARTICLES[todayIndex];
 
   // --- 1. CLOCK & COUNTDOWN LOGIC (TIMEZONE AWARE) ---
   useEffect(() => {
@@ -152,9 +182,6 @@ export const Dashboard = () => {
         target.setHours(h, m, 0, 0);
 
         // If target is earlier than now (in that zone), it means the prayer is tomorrow
-        // (This happens if we haven't updated 'nextPrayer' to tomorrow's list yet, 
-        // OR if simple comparison shows passed. But usually 'nextPrayer' from utils comes correct.)
-        // However, since we reconstructed 'target' using today's date, we must check:
         if (target.getTime() < now.getTime()) {
              target.setDate(target.getDate() + 1);
         }
@@ -301,6 +328,42 @@ export const Dashboard = () => {
                 color="#8b5cf6" 
             />
         </div>
+        
+        {/* LEADERBOARD WIDGET */}
+        <section className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-primary)]/10 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[#D97706] bg-[#D97706]/10 p-1 rounded-md text-sm">trophy</span>
+                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Top Mujahid</h3>
+                </div>
+                <span className="text-[10px] font-bold opacity-40">Global</span>
+            </div>
+            <div className="space-y-3">
+                {leaderboard.slice(0, 3).map((entry, idx) => (
+                    <div key={idx} className={`flex items-center gap-3 p-2 rounded-xl ${entry.isCurrentUser ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20' : ''}`}>
+                         <div className={`size-8 flex items-center justify-center font-bold rounded-lg text-xs ${idx === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                             #{idx + 1}
+                         </div>
+                         <img src={entry.avatar} className="size-8 rounded-full bg-gray-200" alt="avatar" />
+                         <div className="flex-1 min-w-0">
+                             <p className="text-sm font-bold truncate">{entry.name} {entry.isCurrentUser && '(You)'}</p>
+                         </div>
+                         <div className="text-right">
+                             <p className="text-xs font-bold text-[var(--color-primary)]">{entry.score} XP</p>
+                         </div>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* KULTUM HARIAN */}
+        <section>
+            <div className="flex items-center gap-2 mb-3">
+                 <span className="material-symbols-outlined text-[var(--color-primary)] bg-[var(--color-primary)]/10 p-1 rounded-md text-sm">article</span>
+                 <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Kultum Hari Ini</h3>
+            </div>
+            <ArticleCard article={dailyArticle} />
+        </section>
 
         {/* NEW CHART SECTION */}
         <ActivityChart history={history} tasks={tasks} primaryColor={theme.colors.primary} />

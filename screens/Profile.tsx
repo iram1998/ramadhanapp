@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
-import { THEMES } from '../constants';
+import { THEMES, ACHIEVEMENTS } from '../constants';
 import { searchCity, CityResult } from '../utils';
 
 const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: { icon: string, label: string, toggle?: boolean, value?: string, checked?: boolean, onClick?: () => void, loading?: boolean }) => (
@@ -28,7 +28,7 @@ const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: 
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements } = useApp();
   const { user, logout } = useAuth();
   
   // Location Search State
@@ -109,6 +109,36 @@ export const Profile = () => {
         </header>
 
         <main className="p-6 space-y-8">
+            {/* BADGES GALLERY */}
+            <section>
+                <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-[var(--color-primary)] bg-[var(--color-primary)]/10 p-1 rounded-md text-sm">workspace_premium</span>
+                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Pencapaian</h3>
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                    {ACHIEVEMENTS.map((ach) => {
+                        const isUnlocked = achievements.includes(ach.id);
+                        return (
+                            <div key={ach.id} className="flex flex-col items-center gap-1 group relative">
+                                <div 
+                                    className={`size-14 rounded-full flex items-center justify-center border-2 transition-all ${isUnlocked ? 'bg-white border-transparent shadow-md' : 'bg-gray-100 border-gray-200 opacity-50 grayscale'}`}
+                                    style={{ color: isUnlocked ? ach.color : undefined }}
+                                >
+                                    <span className="material-symbols-outlined text-2xl">{ach.icon}</span>
+                                </div>
+                                <span className="text-[9px] text-center font-bold opacity-70 leading-tight">{ach.title}</span>
+                                
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full mb-2 bg-black/80 backdrop-blur-sm text-white text-[10px] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-32 text-center pointer-events-none z-10">
+                                    {ach.description}
+                                    {!isUnlocked && <span className="block text-[var(--color-secondary)] font-bold mt-1">Belum Terbuka</span>}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </section>
+
             {/* PWA INSTALLATION SECTION */}
             
             {/* 1. Android / Chrome Desktop Button */}
@@ -270,7 +300,7 @@ export const Profile = () => {
             </button>
         </main>
 
-        {/* LOCATION SEARCH MODAL */}
+        {/* MODALS (Location, Date, Correction) Code kept same as previous... */}
         {showLocationSearch && (
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                 <div className="bg-[var(--color-card)] w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
@@ -326,18 +356,11 @@ export const Profile = () => {
                                 </div>
                             </button>
                         ))}
-
-                        {searchResults.length === 0 && searchQuery && !isSearching && (
-                            <div className="text-center py-8 opacity-50">
-                                <p>Tidak ditemukan. Coba nama kota yang lebih umum.</p>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>
         )}
 
-        {/* DATE PICKER MODAL */}
         {showDatePicker && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
@@ -366,7 +389,6 @@ export const Profile = () => {
             </div>
         )}
 
-        {/* CORRECTION MODAL */}
         {showCorrection && (
              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto">

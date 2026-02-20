@@ -1,5 +1,5 @@
 
-import { Task, Theme } from './types';
+import { Task, Theme, Achievement, Article } from './types';
 
 // URL Audio Adzan (Mishary Rashid Alafasy - Short/Clear version)
 export const ADZAN_AUDIO_URL = "https://media.blubrry.com/muslim_central_quran/podcasts.qurancentral.com/adhan/mishary-rashid-alafasy/adhan-mishary-rashid-alafasy.mp3";
@@ -142,3 +142,81 @@ export const TRANSLATIONS = {
     stop_audio: 'Stop Audio',
   }
 };
+
+// --- ACHIEVEMENTS DATA ---
+export const ACHIEVEMENTS: Achievement[] = [
+    {
+        id: 'newbie',
+        title: 'Langkah Awal',
+        description: 'Mencapai skor total 100 poin.',
+        icon: 'footprint',
+        color: '#60A5FA', // Blue
+        condition: (d) => d.totalScore >= 100
+    },
+    {
+        id: 'week_streak',
+        title: 'Istiqomah Mingguan',
+        description: 'Menjaga streak ibadah selama 7 hari.',
+        icon: 'local_fire_department',
+        color: '#F59E0B', // Amber
+        condition: (d) => d.streak >= 7
+    },
+    {
+        id: 'quran_lover',
+        title: 'Sahabat Al-Quran',
+        description: 'Menyelesaikan minimal 1 Juz.',
+        icon: 'menu_book',
+        color: '#10B981', // Emerald
+        condition: (d) => d.completedJuz.length >= 1
+    },
+    {
+        id: 'puasa_full',
+        title: 'Pejuang Puasa',
+        description: 'Berpuasa penuh selama 5 hari.',
+        icon: 'restaurant_menu',
+        color: '#8B5CF6', // Purple
+        condition: (d) => d.fastingDays >= 5
+    },
+    {
+        id: 'khatam',
+        title: 'Khatam Quran',
+        description: 'Menyelesaikan 30 Juz Al-Quran.',
+        icon: 'workspace_premium',
+        color: '#D97706', // Gold
+        condition: (d) => d.completedJuz.length >= 30
+    }
+];
+
+// --- ARTICLES DATA (KULTUM) ---
+export const ARTICLES: Article[] = [
+    {
+        id: 'art-01',
+        title: 'Keutamaan 10 Hari Pertama Ramadhan',
+        excerpt: 'Fase pertama bulan Ramadhan adalah fase Rahmat (kasih sayang Allah).',
+        content: `Bulan Ramadhan dibagi menjadi tiga fase: sepuluh hari pertama adalah rahmat, sepuluh hari kedua adalah ampunan (maghfirah), dan sepuluh hari terakhir adalah pembebasan dari api neraka (itqun minan nar). Manfaatkan hari-hari awal ini untuk memperbanyak doa meminta kasih sayang Allah.`,
+        author: 'Ust. Hanan Attaki (Summary)',
+        readTime: '2 min',
+        category: 'Kultum',
+        image: 'https://images.unsplash.com/photo-1542816417-0983c9c9ad53?auto=format&fit=crop&q=80&w=200'
+    },
+    {
+        id: 'art-02',
+        title: 'Tips Menjaga Hidrasi Saat Puasa',
+        excerpt: 'Strategi minum air 2-4-2 agar tubuh tetap bugar seharian.',
+        content: `Kunci agar tidak dehidrasi bukan minum banyak sekaligus saat sahur, tapi membaginya. Rumus 2-4-2: 2 gelas saat berbuka, 4 gelas di malam hari (dicicil), dan 2 gelas saat sahur. Hindari minuman diuretik seperti teh dan kopi berlebihan saat sahur.`,
+        author: 'Dr. Zaidul Akbar (Tips)',
+        readTime: '3 min',
+        category: 'Kesehatan',
+        image: 'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?auto=format&fit=crop&q=80&w=200'
+    },
+    {
+        id: 'art-03',
+        title: 'Sedekah di Bulan Ramadhan',
+        excerpt: 'Pahala sedekah dilipatgandakan di bulan suci ini.',
+        content: `Rasulullah SAW adalah orang yang paling dermawan, dan beliau lebih dermawan lagi di bulan Ramadhan. Sedekah tidak harus berupa uang besar, memberi iftar (buka puasa) walau hanya seteguk air atau sebutir kurma pun mendapat pahala seperti orang yang berpuasa tersebut.`,
+        author: 'Redaksi',
+        readTime: '2 min',
+        category: 'Fiqih',
+        image: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?auto=format&fit=crop&q=80&w=200'
+    }
+];

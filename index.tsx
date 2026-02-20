@@ -3,20 +3,21 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Register Service Worker for PWA
+// Register Service Worker for PWA (Relative Path Update)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    // Gunakan ./sw.js bukan /sw.js untuk menghindari error 404 pada subpath
+    navigator.serviceWorker.register('./sw.js')
       .then((registration) => {
-        console.log('SW registered: ', registration);
+        console.log('SW registered with scope:', registration.scope);
       })
       .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
+        console.log('SW registration failed:', registrationError);
       });
   });
 }
 
-// Error Boundary untuk menangkap error rendering (misal: config firebase salah)
+// Error Boundary untuk menangkap error rendering
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
