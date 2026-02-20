@@ -1,0 +1,7 @@
+{
+  "name": "Ramadhan Tracker 2026",
+  "description": "A comprehensive companion app for Ramadhan 2026 featuring daily ibadah tracking, Quran progress, gamified spiritual scoring, and customizable themes.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
