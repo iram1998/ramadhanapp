@@ -137,8 +137,38 @@ const ArticleCard = ({ article }: { article: Article }) => (
     </div>
 );
 
+// --- NEW HELPER: SMART INSIGHT GENERATOR ---
+const getSmartInsight = (history: any[], tasks: Task[], score: number, quranProgress: any) => {
+    // 1. Check Prayer Consistency (Last 3 days)
+    const recentHistory = history.slice(-3);
+    const avgScore = recentHistory.length > 0 
+        ? recentHistory.reduce((acc, h) => acc + (h.score || 0), 0) / recentHistory.length 
+        : score;
+
+    // Logic Tree
+    if (avgScore === 0 && score === 0) {
+        return "Mulai perjalanan ibadahmu hari ini. Bismillah!";
+    }
+    
+    // Check Quran
+    const pagesToday = tasks.find(t => t.id === 'tilawah' && t.completed);
+    if (!pagesToday && quranProgress.completedJuz.length < 1) {
+        return "Jangan lupa tilawah hari ini, walau satu ayat.";
+    }
+
+    if (score > avgScore + 20) {
+        return "MasyaAllah! Ibadahmu hari ini meningkat pesat.";
+    }
+
+    if (score > 80) {
+        return "Pertahankan semangatmu! Surga merindukanmu.";
+    }
+
+    return "Konsistensi adalah kunci. Sedikit demi sedikit lama-lama menjadi bukit.";
+};
+
 export const Dashboard = () => {
-  const { theme, score, location, timezone, nextPrayer, hijriDate, tasks, history, quranProgress, t, leaderboard } = useApp();
+  const { theme, score, location, timezone, nextPrayer, hijriDate, tasks, history, quranProgress, t, friendsLeaderboard, setActiveTab } = useApp();
   const { user } = useAuth();
   
   // State for Countdown
@@ -149,6 +179,8 @@ export const Dashboard = () => {
   // Article Rotation Logic (Simple day-based)
   const todayIndex = new Date().getDate() % ARTICLES.length;
   const dailyArticle = ARTICLES[todayIndex];
+
+  const smartInsight = getSmartInsight(history, tasks, score, quranProgress);
 
   // --- 1. CLOCK & COUNTDOWN LOGIC (TIMEZONE AWARE) ---
   useEffect(() => {
@@ -204,6 +236,27 @@ export const Dashboard = () => {
 
     return () => clearInterval(timer);
   }, [nextPrayer, timezone]);
+
+  // Share Function
+  const handleShare = async () => {
+      const shareData = {
+          title: 'Ramadhan Tracker 2026',
+          text: `Saya sudah mencapai Level ${Math.floor((score + history.reduce((acc, h) => acc + (h.score || 0), 0)) / 500) + 1} di Ramadhan Tracker! Total XP: ${score}. Yuk gabung!`,
+          url: window.location.href
+      };
+
+      if (navigator.share) {
+          try {
+              await navigator.share(shareData);
+          } catch (err) {
+              console.log('Error sharing:', err);
+          }
+      } else {
+          // Fallback to clipboard
+          navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+          alert('Tautan dan statistik disalin ke clipboard!');
+      }
+  };
 
   // --- 2. STATS CALCULATION ---
   const streakCount = history.length + (score > 0 ? 1 : 0);
@@ -278,15 +331,19 @@ export const Dashboard = () => {
         </div>
 
         {/* Spiritual Progress */}
-        <section className="bg-[var(--color-card)] p-6 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
+        <section className="bg-[var(--color-card)] p-6 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4 relative z-10">
                 <h3 className="font-bold text-lg">Level Spiritual</h3>
-                <span className="text-xs font-bold text-[var(--color-primary)] px-2.5 py-1 bg-[var(--color-primary)]/10 rounded-full uppercase tracking-wider">
-                    {t('level')} {currentLevel}
-                </span>
+                <button 
+                    onClick={handleShare}
+                    className="flex items-center gap-1 text-xs font-bold text-[var(--color-primary)] px-3 py-1.5 bg-[var(--color-primary)]/10 rounded-full hover:bg-[var(--color-primary)] hover:text-white transition-colors"
+                >
+                    <span className="material-symbols-outlined text-xs">share</span>
+                    Share
+                </button>
             </div>
             
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center relative z-10">
                 {/* Custom Circular Progress using conic-gradient */}
                 <div 
                   className="relative size-40 rounded-full flex items-center justify-center transition-all duration-1000 shadow-inner bg-[var(--color-bg)]"
@@ -298,12 +355,18 @@ export const Dashboard = () => {
                         <span className="block text-3xl font-extrabold text-[var(--color-text)]">{totalScore}</span>
                         <span className="text-xs font-semibold opacity-50 uppercase tracking-widest">/ {nextLevelScore} XP</span>
                     </div>
+                    {/* Level Badge Overlay */}
+                    <div className="absolute -bottom-3 bg-[var(--color-primary)] text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                        Lvl {currentLevel}
+                    </div>
                 </div>
                 
-                <p className="mt-6 text-sm text-center opacity-70 leading-relaxed max-w-[240px]">
-                   Teruskan ibadahmu! <br/>
-                   <span className="font-bold text-[var(--color-primary)]">{Math.round(nextLevelScore - totalScore)} XP</span> lagi untuk naik level.
-                </p>
+                {/* SMART INSIGHT TEXT */}
+                <div className="mt-6 text-center bg-[var(--color-primary)]/5 p-3 rounded-xl w-full border border-[var(--color-primary)]/10">
+                    <p className="text-sm font-medium opacity-80 leading-relaxed italic">
+                       "{smartInsight}"
+                    </p>
+                </div>
             </div>
         </section>
 
@@ -329,31 +392,50 @@ export const Dashboard = () => {
             />
         </div>
         
-        {/* LEADERBOARD WIDGET */}
+        {/* FRIENDS LEADERBOARD WIDGET (Replaced Global) */}
         <section className="bg-[var(--color-card)] rounded-2xl border border-[var(--color-primary)]/10 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#D97706] bg-[#D97706]/10 p-1 rounded-md text-sm">trophy</span>
-                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Top Mujahid</h3>
+                    <span className="material-symbols-outlined text-[#D97706] bg-[#D97706]/10 p-1 rounded-md text-sm">groups</span>
+                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Circle of Goodness</h3>
                 </div>
-                <span className="text-[10px] font-bold opacity-40">Global</span>
+                <button 
+                    onClick={() => setActiveTab('profile')} 
+                    className="text-[10px] font-bold text-[var(--color-primary)] flex items-center gap-1 hover:underline"
+                >
+                    <span className="material-symbols-outlined text-xs">person_add</span>
+                    ADD FRIEND
+                </button>
             </div>
-            <div className="space-y-3">
-                {leaderboard.slice(0, 3).map((entry, idx) => (
-                    <div key={idx} className={`flex items-center gap-3 p-2 rounded-xl ${entry.isCurrentUser ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20' : ''}`}>
-                         <div className={`size-8 flex items-center justify-center font-bold rounded-lg text-xs ${idx === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
-                             #{idx + 1}
-                         </div>
-                         <img src={entry.avatar} className="size-8 rounded-full bg-gray-200" alt="avatar" />
-                         <div className="flex-1 min-w-0">
-                             <p className="text-sm font-bold truncate">{entry.name} {entry.isCurrentUser && '(You)'}</p>
-                         </div>
-                         <div className="text-right">
-                             <p className="text-xs font-bold text-[var(--color-primary)]">{entry.score} XP</p>
-                         </div>
-                    </div>
-                ))}
-            </div>
+            
+            {friendsLeaderboard.length <= 1 ? (
+                 <div className="text-center py-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    <p className="text-xs opacity-60 mb-2">Belum ada teman di Circle ini.</p>
+                    <button 
+                        onClick={() => setActiveTab('profile')}
+                        className="text-xs font-bold bg-[var(--color-primary)] text-white px-3 py-1.5 rounded-lg shadow-sm"
+                    >
+                        Undang Teman
+                    </button>
+                 </div>
+            ) : (
+                <div className="space-y-3">
+                    {friendsLeaderboard.slice(0, 5).map((entry, idx) => (
+                        <div key={idx} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${entry.isCurrentUser ? 'bg-[var(--color-primary)]/10 border border-[var(--color-primary)]/20 shadow-sm scale-[1.01]' : 'border border-transparent'}`}>
+                             <div className={`size-8 flex items-center justify-center font-bold rounded-lg text-xs ${idx === 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                                 #{idx + 1}
+                             </div>
+                             <img src={entry.avatar} className="size-8 rounded-full bg-gray-200 object-cover" alt="avatar" />
+                             <div className="flex-1 min-w-0">
+                                 <p className="text-sm font-bold truncate">{entry.name} {entry.isCurrentUser && '(You)'}</p>
+                             </div>
+                             <div className="text-right">
+                                 <p className="text-xs font-bold text-[var(--color-primary)]">{entry.score} XP</p>
+                             </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </section>
 
         {/* KULTUM HARIAN */}

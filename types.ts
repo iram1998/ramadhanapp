@@ -18,6 +18,7 @@ export interface User {
   email: string;
   photoUrl: string;
   achievements?: string[]; // Array of Achievement IDs
+  friends?: string[]; // Array of User IDs (friends)
 }
 
 export interface Task {

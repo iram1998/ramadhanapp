@@ -28,7 +28,7 @@ const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: 
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements, friendsLeaderboard, addFriendByEmail, updateDisplayName } = useApp();
   const { user, logout } = useAuth();
   
   // Location Search State
@@ -42,6 +42,14 @@ export const Profile = () => {
   
   // Correction State
   const [showCorrection, setShowCorrection] = useState(false);
+
+  // Edit Name State
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
+
+  // Add Friend State
+  const [friendEmail, setFriendEmail] = useState('');
+  const [friendStatus, setFriendStatus] = useState<{ loading: boolean, message: string, type: 'success'|'error'|'', invite?: boolean }>({ loading: false, message: '', type: '' });
 
   // iOS Detection for Install Instructions
   const [isIOS, setIsIOS] = useState(false);
@@ -90,25 +98,139 @@ export const Profile = () => {
       setPrayerCorrections({ ...prayerCorrections, [key]: current + delta });
   };
 
+  // Name Editing
+  const startEditingName = () => {
+      setTempName(user?.name || '');
+      setIsEditingName(true);
+  }
+
+  const saveName = async () => {
+      if(tempName.trim()) {
+          await updateDisplayName(tempName.trim());
+          setIsEditingName(false);
+      }
+  }
+
+  // Friend Logic
+  const handleAddFriend = async () => {
+      if(!friendEmail.trim()) return;
+      setFriendStatus({ loading: true, message: '', type: '' });
+      
+      const res = await addFriendByEmail(friendEmail.trim());
+      
+      setFriendStatus({
+          loading: false,
+          message: res.message,
+          type: res.success ? 'success' : 'error',
+          invite: res.notFound
+      });
+      
+      if(res.success) setFriendEmail('');
+  }
+
+  const handleInvite = async () => {
+       const text = `Ayo gabung di Ramadhan Tracker 2026! Cek statistik ibadah dan berkompetisi dalam kebaikan bersamaku.`;
+       const url = window.location.href;
+       if(navigator.share) {
+           navigator.share({ title: 'Ramadhan Tracker', text, url });
+       } else {
+           navigator.clipboard.writeText(`${text} ${url}`);
+           alert('Pesan undangan disalin ke clipboard.');
+       }
+  }
+
   return (
     <div className="animate-fade-in pb-12 relative min-h-screen">
         <header className="p-6 bg-[var(--color-card)] shadow-sm">
              <h1 className="text-2xl font-bold mb-6">{t('settings_title')}</h1>
              <div className="flex items-center gap-4">
-                <div className="size-16 rounded-full border-4 border-[var(--color-primary)]/20 overflow-hidden">
+                <div className="size-16 rounded-full border-4 border-[var(--color-primary)]/20 overflow-hidden shrink-0">
                     <img src={user?.photoUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=Abdullah"} alt="Profile" className="w-full h-full object-cover" />
                 </div>
-                <div>
-                    <h2 className="text-xl font-bold">{user?.name}</h2>
-                    <p className="opacity-60 text-sm">{user?.email}</p>
+                <div className="flex-1 min-w-0">
+                    {isEditingName ? (
+                        <div className="flex items-center gap-2">
+                             <input 
+                                autoFocus
+                                type="text" 
+                                value={tempName}
+                                onChange={(e) => setTempName(e.target.value)}
+                                className="w-full p-1 bg-gray-50 border border-[var(--color-primary)] rounded text-sm font-bold"
+                             />
+                             <button onClick={saveName} className="p-1 bg-[var(--color-primary)] text-white rounded">
+                                 <span className="material-symbols-outlined text-sm">check</span>
+                             </button>
+                        </div>
+                    ) : (
+                        <h2 className="text-xl font-bold flex items-center gap-2">
+                            {user?.name}
+                            <button onClick={startEditingName} className="opacity-30 hover:opacity-100">
+                                <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                        </h2>
+                    )}
+                    <p className="opacity-60 text-sm truncate">{user?.email}</p>
                     <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-[var(--color-primary)]/10 text-[var(--color-primary)]">
-                        Level 12 • {score} pts
+                        Level {Math.floor(score/500) + 1} • {score} pts
                     </div>
                 </div>
              </div>
         </header>
 
         <main className="p-6 space-y-8">
+            
+            {/* SOCIAL / FRIENDS SECTION */}
+            <section className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                 <div className="flex items-center gap-2 mb-4">
+                    <span className="material-symbols-outlined text-[var(--color-primary)] bg-[var(--color-primary)]/10 p-1 rounded-md text-sm">group_add</span>
+                    <h3 className="font-bold text-sm uppercase tracking-wide opacity-80">Teman & Keluarga</h3>
+                </div>
+
+                {/* Add Friend Input */}
+                <div className="mb-4">
+                    <div className="flex gap-2">
+                        <input 
+                            type="email" 
+                            placeholder="Masukkan email teman..."
+                            value={friendEmail}
+                            onChange={(e) => setFriendEmail(e.target.value)}
+                            className="flex-1 p-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)]"
+                        />
+                        <button 
+                            onClick={handleAddFriend}
+                            disabled={friendStatus.loading}
+                            className="bg-[var(--color-primary)] text-white px-3 rounded-xl flex items-center justify-center disabled:opacity-50"
+                        >
+                            {friendStatus.loading ? <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined">add</span>}
+                        </button>
+                    </div>
+                    {/* Status Message */}
+                    {friendStatus.message && (
+                        <div className={`mt-2 p-3 rounded-lg text-xs flex items-center justify-between ${friendStatus.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                            <span>{friendStatus.message}</span>
+                            {friendStatus.invite && (
+                                <button onClick={handleInvite} className="underline font-bold ml-2">Undang Sekarang</button>
+                            )}
+                        </div>
+                    )}
+                </div>
+                
+                {/* Mini List */}
+                <div className="space-y-2 max-h-[150px] overflow-y-auto pr-1">
+                    {friendsLeaderboard.filter(f => !f.isCurrentUser).map(friend => (
+                        <div key={friend.id} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 border border-gray-100">
+                             <img src={friend.avatar} className="size-8 rounded-full bg-white" alt="avatar" />
+                             <div className="flex-1 min-w-0">
+                                 <p className="text-sm font-bold truncate">{friend.name}</p>
+                             </div>
+                        </div>
+                    ))}
+                    {friendsLeaderboard.length <= 1 && (
+                        <p className="text-xs text-center opacity-40 italic py-2">Belum ada teman ditambahkan.</p>
+                    )}
+                </div>
+            </section>
+
             {/* BADGES GALLERY */}
             <section>
                 <div className="flex items-center gap-2 mb-3">

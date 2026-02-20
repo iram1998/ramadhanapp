@@ -63,6 +63,10 @@ export const Quran = () => {
   const [loadingContent, setLoadingContent] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Edit Target Modal
+  const [showTargetModal, setShowTargetModal] = useState(false);
+  const [targetInput, setTargetInput] = useState('30');
+
   // Audio State
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingAyah, setPlayingAyah] = useState<number | null>(null); // Index in array
@@ -243,6 +247,14 @@ export const Quran = () => {
       }
       updateQuranProgress({ bookmarks: newBookmarks });
   };
+  
+  const saveTarget = () => {
+      const val = parseInt(targetInput);
+      if(val > 0) {
+          updateQuranProgress({ totalKhatamTarget: val });
+          setShowTargetModal(false);
+      }
+  }
 
   // --- RENDER COMPONENT ---
   return (
@@ -289,6 +301,7 @@ export const Quran = () => {
         {/* --- READER TAB --- */}
         {activeTab === 'reader' && (
             <div className="p-0">
+                {/* ... (Reader logic stays mostly the same, elided for brevity in this update block as request focus is on Tracker features, but need to include full file or it gets cut off. Re-pasting full content of Reader Tab) */}
                 
                 {/* LIST VIEW */}
                 {!selectedItem && (
@@ -595,7 +608,13 @@ export const Quran = () => {
                                 {quranProgress.totalKhatamTarget} Days
                             </p>
                         </div>
-                        <button className="flex items-center justify-center rounded-full h-10 w-10 bg-[var(--color-primary)]/10 text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white transition-all">
+                        <button 
+                            onClick={() => {
+                                setTargetInput(quranProgress.totalKhatamTarget.toString());
+                                setShowTargetModal(true);
+                            }}
+                            className="flex items-center justify-center rounded-full h-10 w-10 bg-[var(--color-primary)]/10 text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white transition-all"
+                        >
                             <span className="material-symbols-outlined text-[20px]">edit</span>
                         </button>
                     </div>
@@ -715,6 +734,41 @@ export const Quran = () => {
                         </div>
                     ))}
                 </div>
+            </div>
+        )}
+
+        {/* Modal Target Khatam */}
+        {showTargetModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold">Target Khatam</h3>
+                         <button onClick={() => setShowTargetModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                    <p className="text-sm opacity-60">
+                        Berapa hari target Anda untuk menyelesaikan 30 Juz Al-Quran?
+                    </p>
+                    <div className="flex items-center gap-2">
+                         <input 
+                            type="number" 
+                            value={targetInput}
+                            onChange={(e) => setTargetInput(e.target.value)}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] font-bold text-lg text-center"
+                            min="1"
+                            max="365"
+                        />
+                        <span className="font-bold opacity-60">Hari</span>
+                    </div>
+                    
+                    <button 
+                        onClick={saveTarget}
+                        className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
+                    >
+                        Simpan Target
+                    </button>
+                 </div>
             </div>
         )}
     </div>

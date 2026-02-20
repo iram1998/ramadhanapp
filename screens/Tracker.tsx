@@ -7,11 +7,20 @@ import { getMonthlyPrayerTimes, calculateRamadhanDay, calculateQiblaDirection } 
 
 const ZakatCalculator = ({ onClose }: { onClose: () => void }) => {
     const [tab, setTab] = useState<'fitrah' | 'maal'>('maal');
-    const [assets, setAssets] = useState('');
-    const [debts, setDebts] = useState('');
-    const [goldPrice, setGoldPrice] = useState('1100000'); // Est. 1.1jt/gram
-    const [ricePrice, setRicePrice] = useState('15000'); // Est. 15rb/liter
-    const [familyMembers, setFamilyMembers] = useState('1');
+    
+    // Persistent State
+    const [assets, setAssets] = useState(() => localStorage.getItem('zakat_assets') || '');
+    const [debts, setDebts] = useState(() => localStorage.getItem('zakat_debts') || '');
+    const [goldPrice, setGoldPrice] = useState(() => localStorage.getItem('zakat_goldPrice') || '1300000');
+    const [ricePrice, setRicePrice] = useState(() => localStorage.getItem('zakat_ricePrice') || '15000');
+    const [familyMembers, setFamilyMembers] = useState(() => localStorage.getItem('zakat_family') || '1');
+
+    // Persist changes
+    useEffect(() => localStorage.setItem('zakat_assets', assets), [assets]);
+    useEffect(() => localStorage.setItem('zakat_debts', debts), [debts]);
+    useEffect(() => localStorage.setItem('zakat_goldPrice', goldPrice), [goldPrice]);
+    useEffect(() => localStorage.setItem('zakat_ricePrice', ricePrice), [ricePrice]);
+    useEffect(() => localStorage.setItem('zakat_family', familyMembers), [familyMembers]);
 
     // Nisab Emas 85 gram
     const nisabMaal = 85 * parseInt(goldPrice || '0');
@@ -202,7 +211,6 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
                         </div>
 
                         {/* Qibla Pointer (Green Arrow) */}
-                        {/* This needs to point to Qibla relative to North */}
                         <div 
                              className="absolute w-1 h-32 origin-bottom transition-transform duration-300 ease-out"
                              style={{ 
@@ -216,8 +224,6 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
                                 </div>
                             </div>
                         </div>
-                        
-                        {/* Kaaba Icon Fixed for visualization relative to arrow? No, arrow moves. */}
                         
                         <div className="absolute text-[10px] bottom-[-40px] opacity-50">
                             Pastikan HP datar. Jauhkan dari magnet/logam.
@@ -244,7 +250,8 @@ export const Tracker = () => {
       history,
       updateHistoryTask,
       updateHistoryFasting,
-      timezone 
+      timezone,
+      setActiveTab 
   } = useApp();
   
   // View State: 'tracker' or 'schedule'
@@ -267,8 +274,6 @@ export const Tracker = () => {
   const isToday = viewDate === todayStr;
 
   // --- DERIVE DATA BASED ON VIEW DATE ---
-  // If Today: use Context main state. If History: find in history array or default.
-  
   let displayedTasks = tasks;
   let displayedFasting = fastingStatus;
   let displayedRamadhanDay = currentRamadhanDay;
@@ -575,7 +580,7 @@ export const Tracker = () => {
 
         <main className="px-6 space-y-6">
             
-            {/* NEW: TOOL BUTTONS (Kiblat & Zakat) */}
+            {/* TOOL BUTTONS (Kiblat & Zakat) */}
             <div className="grid grid-cols-2 gap-3">
                 <button 
                     onClick={() => setActiveTool('qibla')}
@@ -631,7 +636,7 @@ export const Tracker = () => {
                     </button>
                 </div>
 
-                {/* IMSAK & MAGHRIB CARDS (UPDATED LAYOUT) */}
+                {/* IMSAK & MAGHRIB CARDS */}
                 <div className="grid grid-cols-2 gap-3">
                     {/* Imsak Card */}
                     <div className="bg-[var(--color-card)] p-4 rounded-2xl border border-[var(--color-primary)]/10 shadow-sm flex flex-col gap-2 relative overflow-hidden">
@@ -725,9 +730,11 @@ export const Tracker = () => {
                 <div className="space-y-2">
                     {sunnahs.map((task) => {
                          const time = (isToday && task.id === 'dhuha') ? prayerSchedule['dhuha'] : null;
+                         const isDzikir = task.id.includes('dzikir');
+                         
                          return (
-                            <label key={task.id} className={`flex items-center justify-between p-4 bg-[var(--color-card)] rounded-xl border transition-all cursor-pointer ${task.completed ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-primary)]/10'}`}>
-                                <div className="flex items-center gap-3">
+                            <div key={task.id} className={`flex items-center justify-between p-4 bg-[var(--color-card)] rounded-xl border transition-all ${task.completed ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5' : 'border-[var(--color-primary)]/10'}`}>
+                                <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => handleToggleTask(task.id)}>
                                     <div className={`size-10 rounded-lg flex items-center justify-center transition-colors ${task.completed ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]'}`}>
                                         <span className="material-symbols-outlined">{task.icon}</span>
                                     </div>
@@ -736,16 +743,26 @@ export const Tracker = () => {
                                         {time && <span className="text-xs opacity-50 font-mono">Starts {time}</span>}
                                     </div>
                                 </div>
-                                <div className={`size-6 rounded-md border-2 flex items-center justify-center transition-all ${task.completed ? 'bg-[var(--color-primary)] border-[var(--color-primary)]' : 'border-[var(--color-primary)]/30'}`}>
-                                    {task.completed && <span className="material-symbols-outlined text-white text-sm font-bold">check</span>}
+                                
+                                <div className="flex items-center gap-3">
+                                    {/* Link to Dzikir Page for relevant tasks */}
+                                    {isDzikir && (
+                                        <button 
+                                            onClick={() => setActiveTab('doa')}
+                                            className="px-3 py-1 bg-[var(--color-primary)]/10 hover:bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-bold rounded-lg transition-colors"
+                                        >
+                                            Buka
+                                        </button>
+                                    )}
+
+                                    <div 
+                                        onClick={() => handleToggleTask(task.id)}
+                                        className={`size-6 rounded-md border-2 flex items-center justify-center transition-all cursor-pointer ${task.completed ? 'bg-[var(--color-primary)] border-[var(--color-primary)]' : 'border-[var(--color-primary)]/30'}`}
+                                    >
+                                        {task.completed && <span className="material-symbols-outlined text-white text-sm font-bold">check</span>}
+                                    </div>
                                 </div>
-                                <input 
-                                    type="checkbox" 
-                                    className="hidden"
-                                    checked={task.completed}
-                                    onChange={() => handleToggleTask(task.id)}
-                                />
-                            </label>
+                            </div>
                          );
                     })}
                 </div>

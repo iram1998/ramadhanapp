@@ -5,9 +5,13 @@ import { THEMES, INITIAL_TASKS, TRANSLATIONS, ADZAN_AUDIO_URL, ACHIEVEMENTS } fr
 import { getPrayerTimes, getHijriDate, calculateRamadhanDay, addMinutesToTime } from '../utils';
 import { useAuth } from './AuthContext';
 import { db } from '../firebase';
-import { doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
 
 interface AppContextType {
+  // Navigation
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+
   theme: Theme;
   setThemeId: (id: string) => void;
   language: 'id' | 'en';
@@ -51,7 +55,15 @@ interface AppContextType {
   installApp: () => void;
   timezone: string;
   achievements: string[]; // Unlocked Achievement IDs
-  leaderboard: LeaderboardEntry[];
+  
+  // Friend System
+  friendsLeaderboard: LeaderboardEntry[];
+  addFriendByEmail: (email: string) => Promise<{ success: boolean; message: string; notFound?: boolean }>;
+  updateDisplayName: (newName: string) => Promise<void>;
+  
+  // New: Achievement Popup State
+  newlyUnlockedAchievement: Achievement | null;
+  closeAchievementPopup: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -59,6 +71,9 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('dashboard');
+
   // Settings State
   const [currentThemeId, setCurrentThemeId] = useState<string>('gold-green');
   const [language, setLanguageState] = useState<'id' | 'en'>('id');
@@ -110,9 +125,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     bookmarks: [] 
   });
 
-  // Gamification State
+  // Gamification & Social State
   const [achievements, setAchievements] = useState<string[]>([]);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [newlyUnlockedAchievement, setNewlyUnlockedAchievement] = useState<Achievement | null>(null);
+  const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [friendIds, setFriendIds] = useState<string[]>([]); // Helper to track friend IDs locally
 
   const theme = THEMES.find((t) => t.id === currentThemeId) || THEMES[0];
   const isDemoUser = !user || user.id === 'mock-user-123';
@@ -240,6 +257,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       
       const streak = currentHistory.length; // Approximate, could be refined
 
+      let lastUnlockedObj: Achievement | null = null;
+
       ACHIEVEMENTS.forEach(ach => {
           if (!currentAchievements.includes(ach.id)) {
                if (ach.condition({
@@ -249,6 +268,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                    fastingDays
                })) {
                    newlyUnlocked.push(ach.id);
+                   lastUnlockedObj = ach;
                }
           }
       });
@@ -256,42 +276,154 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (newlyUnlocked.length > 0) {
           const updated = [...currentAchievements, ...newlyUnlocked];
           setAchievements(updated);
-          // Alert user?
+          
+          // Trigger Popup for the last unlocked one
+          if (lastUnlockedObj) {
+              setNewlyUnlockedAchievement(lastUnlockedObj);
+          }
           return updated;
       }
       return currentAchievements;
   }
 
-  // Generate Mock Leaderboard
-  const generateLeaderboard = (currentUserScore: number) => {
-      const mockUsers = [
-          { id: 'u1', name: 'Fulan Abdullah', score: 1200, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Fulan', isCurrentUser: false },
-          { id: 'u2', name: 'Aisyah Putri', score: 950, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aisyah', isCurrentUser: false },
-          { id: 'u3', name: 'Umar bin Khattab', score: 880, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Umar', isCurrentUser: false },
-          { id: 'u4', name: 'Fatimah Az-Zahra', score: 820, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Fatimah', isCurrentUser: false },
-      ];
-      
-      // Calculate total score for current user
-      const total = history.reduce((acc, h) => acc + (h.score || 0), 0) + score;
-      
-      const entry: LeaderboardEntry = {
-          id: user?.id || 'me',
-          name: user?.name || 'Saya',
-          score: total,
-          avatar: user?.photoUrl || '',
-          isCurrentUser: true,
-          rank: 0
+  const closeAchievementPopup = () => {
+      setNewlyUnlockedAchievement(null);
+  };
+
+  // --- SOCIAL / FRIENDS LOGIC ---
+
+  const addFriendByEmail = async (email: string): Promise<{ success: boolean; message: string; notFound?: boolean }> => {
+      if (!user || !db) return { success: false, message: "Anda harus login." };
+      if (email === user.email) return { success: false, message: "Tidak bisa menambahkan diri sendiri." };
+
+      if (isDemoUser) {
+          // Demo Mode Mock Logic
+          if (email.includes('error')) return { success: false, message: "Email tidak ditemukan.", notFound: true };
+          
+          const mockFriend: LeaderboardEntry = {
+              id: `friend-${Math.random()}`,
+              name: email.split('@')[0],
+              score: Math.floor(Math.random() * 2000),
+              avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+              isCurrentUser: false,
+              rank: 0
+          };
+          setFriendsLeaderboard(prev => [...prev, mockFriend]);
+          return { success: true, message: `Berhasil menambahkan ${mockFriend.name}` };
+      }
+
+      try {
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where("email", "==", email));
+          const querySnapshot = await getDocs(q);
+
+          if (querySnapshot.empty) {
+              return { success: false, message: "Email belum terdaftar di aplikasi.", notFound: true };
+          }
+
+          const friendDoc = querySnapshot.docs[0];
+          const friendData = friendDoc.data();
+          
+          if (friendIds.includes(friendDoc.id)) {
+              return { success: false, message: "Teman sudah ada di daftar." };
+          }
+
+          // Update current user's friend list in Firestore
+          const currentUserRef = doc(db, 'users', user.id);
+          await updateDoc(currentUserRef, {
+              friends: arrayUnion(friendDoc.id)
+          });
+          
+          // Local update handled by snapshot listener or manual refresh
+          return { success: true, message: `Berhasil menambahkan ${friendData.name || 'Teman'}` };
+
+      } catch (e) {
+          console.error("Add friend error:", e);
+          return { success: false, message: "Terjadi kesalahan." };
+      }
+  };
+
+  const updateDisplayName = async (newName: string) => {
+      if (!user) return;
+      if (isDemoUser) {
+          alert("Nama berhasil diubah (Mode Demo).");
+          return;
+      }
+      try {
+          const userRef = doc(db, 'users', user.id);
+          await updateDoc(userRef, { name: newName });
+          // Note: AuthContext might need refresh, but Firestore data is updated
+      } catch (e) {
+          console.error("Update name error", e);
+      }
+  };
+
+  // Fetch Friends Data for Leaderboard
+  useEffect(() => {
+      const fetchFriendsData = async () => {
+          if (!user || !db) return;
+          
+          // If Demo User, we skip this and rely on the mock data set in the other useEffect
+          if (isDemoUser) return;
+
+          // 1. Calculate My Score & Entry
+          const currentUserTotal = history.reduce((acc, h) => acc + (h.score || 0), 0) + score;
+          const meEntry: LeaderboardEntry = {
+              id: user.id,
+              name: user.name ? `${user.name.split(' ')[0]} (Saya)` : 'Saya',
+              score: currentUserTotal,
+              avatar: user.photoUrl,
+              isCurrentUser: true,
+              rank: 1
+          };
+
+          // 2. If No Friends, set Leaderboard to just Me
+          if (friendIds.length === 0) {
+              setFriendsLeaderboard([meEntry]);
+              return;
+          }
+
+          try {
+              // 3. Fetch Friends from Firestore
+              // Note: Firestore 'in' query supports max 10 values. For MVP simple loop is ok.
+              const friendsDataPromises = friendIds.map(fid => getDoc(doc(db, 'users', fid)));
+              const snapshots = await Promise.all(friendsDataPromises);
+              
+              const friendsEntries: LeaderboardEntry[] = [];
+              
+              snapshots.forEach(snap => {
+                  if (snap.exists()) {
+                      const d = snap.data();
+                      // Calculate total score from history + current score
+                      const totalH = (d.history || []).reduce((acc: number, h: HistoryData) => acc + (h.score || 0), 0);
+                      const total = totalH + (d.score || 0);
+
+                      friendsEntries.push({
+                          id: snap.id,
+                          name: d.name || 'Teman',
+                          score: total,
+                          avatar: d.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${d.email}`,
+                          isCurrentUser: false,
+                          rank: 0
+                      });
+                  }
+              });
+
+              // 4. Combine Me + Friends, Sort, and Rank
+              const all = [...friendsEntries, meEntry].sort((a, b) => b.score - a.score);
+              const ranked = all.map((u, i) => ({ ...u, rank: i + 1 }));
+              
+              setFriendsLeaderboard(ranked);
+
+          } catch (e) {
+              console.error("Error fetching friends leaderboard", e);
+              // Fallback to just me if fetch fails
+              setFriendsLeaderboard([meEntry]);
+          }
       };
 
-      const all = [...mockUsers, entry].sort((a, b) => b.score - a.score);
-      const ranked = all.map((u, i) => ({ ...u, rank: i + 1 }));
-      setLeaderboard(ranked);
-  }
-
-  // Update Leaderboard on load and score change
-  useEffect(() => {
-     generateLeaderboard(score);
-  }, [score, history, user]);
+      fetchFriendsData();
+  }, [friendIds, score, history, user, isDemoUser]); // Refetch when my score changes or friend list changes
 
 
   // Sync data from Firestore
@@ -299,6 +431,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     if (!db || user.id === 'mock-user-123') {
         checkDailyReset(INITIAL_TASKS, 0, [], 'puasa', '', 0, {}); 
+        // Mock Friends - ONLY FOR DEMO USER
+        const mockFriends = [
+            { id: 'f1', name: 'Ayah', score: 1500, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ayah', isCurrentUser: false, rank: 1 },
+            { id: 'me', name: 'Saya', score: 1200, avatar: user.photoUrl, isCurrentUser: true, rank: 2 },
+            { id: 'f2', name: 'Ibu', score: 1100, avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ibu', isCurrentUser: false, rank: 3 },
+        ];
+        setFriendsLeaderboard(mockFriends);
         return;
     }
 
@@ -313,6 +452,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const fetchedDate = data.lastRecordedDate || '';
             const fetchedPages = data.pagesReadToday || 0;
             const fetchedDzikir = data.dzikirCounts || {};
+            const fetchedFriends = data.friends || [];
 
             if (data.themeId) setCurrentThemeId(data.themeId);
             if (data.quranProgress) setQuranProgress(data.quranProgress);
@@ -323,13 +463,39 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (data.audioEnabled !== undefined) setAudioEnabled(data.audioEnabled);
             if (data.prayerCorrections) setPrayerCorrectionsState(data.prayerCorrections);
             if (data.achievements) setAchievements(data.achievements);
+            
+            // Set Friend IDs for fetching detail
+            setFriendIds(fetchedFriends);
 
             checkDailyReset(fetchedTasks, fetchedScore, fetchedHistory, fetchedFasting, fetchedDate, fetchedPages, fetchedDzikir);
 
         } else {
             const today = new Date().toISOString().split('T')[0];
             setLastRecordedDate(today);
-            saveDataToFirestore(INITIAL_TASKS, 0, 'puasa', 'gold-green', quranProgress, null, '2026-02-19', [], today, 0, {}, 'id', false, false, {}, []);
+            // Save initial user doc including empty friends array and email for searching
+            setDoc(userRef, {
+                email: user.email,
+                name: user.name,
+                photoUrl: user.photoUrl,
+                friends: [],
+                tasks: INITIAL_TASKS,
+                score: 0,
+                fastingStatus: 'puasa',
+                themeId: 'gold-green',
+                quranProgress: quranProgress,
+                manualLocation: null,
+                ramadhanStartDate: '2026-02-19',
+                history: [],
+                lastRecordedDate: today,
+                pagesReadToday: 0,
+                dzikirCounts: {},
+                language: 'id',
+                notificationsEnabled: false,
+                audioEnabled: false,
+                prayerCorrections: {},
+                achievements: [],
+                lastUpdated: new Date().toISOString()
+            }, { merge: true });
         }
     }, (error) => {
         console.error("Firestore listener error:", error);
@@ -734,6 +900,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   return (
     <AppContext.Provider
       value={{
+        activeTab,
+        setActiveTab,
         theme,
         setThemeId,
         language,
@@ -777,7 +945,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         installApp,
         timezone,
         achievements,
-        leaderboard
+        
+        friendsLeaderboard,
+        addFriendByEmail,
+        updateDisplayName,
+
+        newlyUnlockedAchievement,
+        closeAchievementPopup
       }}
     >
       {children}
