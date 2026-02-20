@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { getMonthlyPrayerTimes, calculateRamadhanDay } from '../utils';
@@ -125,14 +126,14 @@ export const Tracker = () => {
             </header>
 
             {/* Scrollable Content */}
-            <div className="p-0">
+            <div className="p-0 overflow-x-auto">
                 {loadingSchedule ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-4 mt-8">
                         <div className="size-8 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
                         <p className="text-sm opacity-50">Memuat jadwal...</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-gray-100 min-w-[320px]">
                         {monthlySchedule.map((day, idx) => {
                             const dateStr = parseDateString(day.date.gregorian.date); 
                             const rDay = calculateRamadhanDay(ramadhanStartDate, dateStr);

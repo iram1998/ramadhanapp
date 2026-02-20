@@ -58,3 +58,7 @@ export interface PrayerTime {
   time: string;
   isNext: boolean;
 }
+
+export interface PrayerCorrections {
+    [key: string]: number; // id prayer (subuh, dzuhur, etc) -> minutes offset
+}

@@ -1,8 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import { Theme, Task, DailyProgress, QuranProgress, PrayerTime, HistoryData } from '../types';
+import { Theme, Task, DailyProgress, QuranProgress, PrayerTime, HistoryData, PrayerCorrections } from '../types';
 import { THEMES, INITIAL_TASKS, TRANSLATIONS, ADZAN_AUDIO_URL } from '../constants';
-import { getPrayerTimes, getHijriDate, calculateRamadhanDay } from '../utils';
+import { getPrayerTimes, getHijriDate, calculateRamadhanDay, addMinutesToTime } from '../utils';
 import { useAuth } from './AuthContext';
 import { db } from '../firebase';
 import { doc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
@@ -35,6 +35,8 @@ interface AppContextType {
   location: string;
   prayerTimes: PrayerTime[];
   prayerSchedule: Record<string, string>; 
+  prayerCorrections: PrayerCorrections;
+  setPrayerCorrections: (corrections: PrayerCorrections) => void;
   hijriDate: string;
   nextPrayer: PrayerTime | undefined;
   manualLocation: { name: string; lat: number; lon: number } | null;
@@ -87,11 +89,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [prayerSchedule, setPrayerSchedule] = useState<Record<string, string>>({});
   const [nextPrayer, setNextPrayer] = useState<PrayerTime | undefined>(undefined);
   const [hijriDate, setHijriDate] = useState<string>('');
+  const [prayerCorrections, setPrayerCorrectionsState] = useState<PrayerCorrections>({});
 
   // Ramadhan Settings
   const [ramadhanStartDate, setRamadhanStartDateState] = useState<string>('2026-02-18');
   
-  // UPDATED: Calculate day using Timezone (for "Today" dashboard)
   const currentRamadhanDay = calculateRamadhanDay(ramadhanStartDate, timezone);
 
   const [quranProgress, setQuranProgress] = useState<QuranProgress>({
@@ -171,7 +173,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const toggleAudio = () => {
       const newState = !audioEnabled;
       setAudioEnabled(newState);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, newState);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, newState, prayerCorrections);
   };
 
 
@@ -190,7 +192,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       newDzikir: Record<string, number>,
       newLang: string,
       newNotif: boolean,
-      newAudio: boolean
+      newAudio: boolean,
+      newCorrections: PrayerCorrections
   ) => {
     if (!user || !db || isDemoUser) return;
 
@@ -211,6 +214,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             language: newLang,
             notificationsEnabled: newNotif,
             audioEnabled: newAudio,
+            prayerCorrections: newCorrections,
             lastUpdated: new Date().toISOString()
         }, { merge: true });
     } catch (e) {
@@ -245,13 +249,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (data.language) setLanguageState(data.language);
             if (data.notificationsEnabled !== undefined) setNotificationsEnabled(data.notificationsEnabled);
             if (data.audioEnabled !== undefined) setAudioEnabled(data.audioEnabled);
+            if (data.prayerCorrections) setPrayerCorrectionsState(data.prayerCorrections);
 
             checkDailyReset(fetchedTasks, fetchedScore, fetchedHistory, fetchedFasting, fetchedDate, fetchedPages, fetchedDzikir);
 
         } else {
             const today = new Date().toISOString().split('T')[0];
             setLastRecordedDate(today);
-            saveDataToFirestore(INITIAL_TASKS, 0, 'puasa', 'gold-green', quranProgress, null, '2026-02-18', [], today, 0, {}, 'id', false, false);
+            saveDataToFirestore(INITIAL_TASKS, 0, 'puasa', 'gold-green', quranProgress, null, '2026-02-18', [], today, 0, {}, 'id', false, false, {});
         }
     }, (error) => {
         console.error("Firestore listener error:", error);
@@ -268,9 +273,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const checkInterval = setInterval(() => {
           // Get "Now" in location's timezone
           const nowInZone = new Date().toLocaleString('en-US', { timeZone: timezone, hour12: false });
-          // Extract HH:MM
-          // Format usually "M/D/YYYY, HH:MM:SS" or similar depending on locale, safer to use format parts or split
-          // Let's use Date object from the string
           const zoneDate = new Date(nowInZone);
           const currentHour = String(zoneDate.getHours()).padStart(2, '0');
           const currentMinute = String(zoneDate.getMinutes()).padStart(2, '0');
@@ -373,29 +375,69 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setDzikirCounts(resetDzikir);
       setLastRecordedDate(today);
 
-      saveDataToFirestore(resetTasks, 0, 'puasa', currentThemeId, quranProgress, manualLocation, ramadhanStartDate, newHistory, today, resetPages, resetDzikir, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(resetTasks, 0, 'puasa', currentThemeId, quranProgress, manualLocation, ramadhanStartDate, newHistory, today, resetPages, resetDzikir, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
-  // --- PRAYER TIMES LOGIC ---
+  // --- PRAYER TIMES LOGIC (WITH CORRECTIONS) ---
   const fetchPrayers = async (lat: number, long: number, locName?: string) => {
       try {
           const schedule = await getPrayerTimes(lat, long);
+          
+          // Apply Corrections
+          const applyOffset = (time: string, id: string) => {
+              const offset = prayerCorrections[id] || 0;
+              return offset === 0 ? time : addMinutesToTime(time, offset);
+          };
+
           const fullList: PrayerTime[] = [
-              { name: 'Imsak', time: schedule.imsak, isNext: false },
+              { name: 'Imsak', time: applyOffset(schedule.imsak, 'subuh'), isNext: false }, // Apply subuh offset to Imsak too generally
               ...schedule.list.map(p => ({
                   name: p.name,
-                  time: p.time,
+                  time: applyOffset(p.time, p.id),
                   isNext: p.isNext
               }))
           ];
+          
+          // Update schedule map with corrected times
+          const correctedSchedule: Record<string, string> = {};
+          Object.keys(schedule.times).forEach(key => {
+             // Basic mapping, assuming standard keys 'subuh', 'dzuhur' etc match correction keys
+             // Note: aladhan keys are PascalCase (Fajr, Dhuhr) but our app uses lowercase IDs
+             // We'll rely on our mapped 'list' for display mainly.
+             // But for the 'times' dictionary used in Tracker, we need to be careful.
+             // Simpler approach: reconstruct dictionary from fullList
+          });
+
+          // Re-evaluate 'next prayer' based on corrected times
+          const nowInZone = new Date().toLocaleString('en-US', { timeZone: schedule.timezone, hour12: false });
+          const zoneDate = new Date(nowInZone);
+          const currentHour = String(zoneDate.getHours()).padStart(2, '0');
+          const currentMinute = String(zoneDate.getMinutes()).padStart(2, '0');
+          const currentTimeStr = `${currentHour}:${currentMinute}`;
+          
+          let nextP = fullList.find(p => p.time > currentTimeStr && p.name !== 'Imsak');
+          if (!nextP) nextP = fullList.find(p => p.name !== 'Imsak'); // Wrap to Fajr next day
+          
+          if(nextP) nextP.isNext = true;
 
           setPrayerTimes(fullList);
-          setPrayerSchedule(schedule.times);
           
-          if (schedule.next) {
+          // Update dictionary for easier access in Tracker
+          const timesDict: Record<string, string> = {
+              imsak: applyOffset(schedule.imsak, 'subuh'),
+              subuh: applyOffset(schedule.times.subuh, 'subuh'),
+              dhuha: applyOffset(schedule.times.dhuha, 'dhuha'),
+              dzuhur: applyOffset(schedule.times.dzuhur, 'dzuhur'),
+              ashar: applyOffset(schedule.times.ashar, 'ashar'),
+              maghrib: applyOffset(schedule.times.maghrib, 'maghrib'),
+              isya: applyOffset(schedule.times.isya, 'isya'),
+          };
+          setPrayerSchedule(timesDict);
+
+          if (nextP) {
               setNextPrayer({
-                  name: schedule.next.name,
-                  time: schedule.next.time,
+                  name: nextP.name,
+                  time: nextP.time,
                   isNext: true
               });
           }
@@ -407,7 +449,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    // Update Hijri Date whenever timezone changes
     setHijriDate(getHijriDate(timezone));
     
     if (manualLocation) {
@@ -422,7 +463,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             fetchPrayers(-6.1702, 106.8310, "Jakarta (Default)");
         }
     }
-  }, [manualLocation, timezone]); // Added timezone dep
+  }, [manualLocation, timezone, prayerCorrections]); // Dependencies updated
 
   const refreshLocation = () => {
        if (manualLocation) {
@@ -448,33 +489,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const newScore = newTasks.reduce((acc, curr) => acc + (curr.completed ? curr.points : 0), 0);
     setTasks(newTasks);
     setScore(newScore);
-    saveDataToFirestore(newTasks, newScore, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+    saveDataToFirestore(newTasks, newScore, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
   const setFastingStatus = (status: 'puasa' | 'tidak' | 'uzur') => {
       setFastingStatusState(status);
-      saveDataToFirestore(tasks, score, status, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, status, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
   const setThemeId = (id: string) => {
     setCurrentThemeId(id);
-    saveDataToFirestore(tasks, score, fastingStatus, id, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+    saveDataToFirestore(tasks, score, fastingStatus, id, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
   const updateQuranProgress = (updates: Partial<QuranProgress>) => {
       const newQuran = { ...quranProgress, ...updates };
       setQuranProgress(newQuran);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, newQuran, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, newQuran, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
   const setManualLocation = (loc: { name: string; lat: number; lon: number } | null) => {
       setManualLocationState(loc);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, loc, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, loc, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   };
 
   const setRamadhanStartDate = (date: string) => {
       setRamadhanStartDateState(date);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, date, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, date, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   }
 
   const setPagesReadToday = (count: number) => {
@@ -495,9 +536,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
            const newScore = newTasks.reduce((acc, curr) => acc + (curr.completed ? curr.points : 0), 0);
            setTasks(newTasks);
            setScore(newScore);
-           saveDataToFirestore(newTasks, newScore, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, count, dzikirCounts, language, notificationsEnabled, audioEnabled);
+           saveDataToFirestore(newTasks, newScore, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, count, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
       } else {
-           saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, count, dzikirCounts, language, notificationsEnabled, audioEnabled);
+           saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, count, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
       }
   }
 
@@ -505,12 +546,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const currentVal = dzikirCounts[id] || 0;
       const newCounts = { ...dzikirCounts, [id]: currentVal + 1 };
       setDzikirCounts(newCounts);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, newCounts, language, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, newCounts, language, notificationsEnabled, audioEnabled, prayerCorrections);
   }
 
   const setLanguage = (lang: 'id' | 'en') => {
       setLanguageState(lang);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, lang, notificationsEnabled, audioEnabled);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, lang, notificationsEnabled, audioEnabled, prayerCorrections);
+  }
+
+  const setPrayerCorrections = (corrections: PrayerCorrections) => {
+      setPrayerCorrectionsState(corrections);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, corrections);
   }
 
   const t = (key: keyof typeof TRANSLATIONS['id']) => {
@@ -527,13 +573,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           if (permission === 'granted') {
               setNotificationsEnabled(true);
               new Notification("Ramadhan Tracker", { body: language === 'id' ? "Notifikasi diaktifkan! Kami akan mengingatkan waktu sholat." : "Notifications enabled! We will remind you at prayer times." });
-              saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, true, audioEnabled);
+              saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, true, audioEnabled, prayerCorrections);
           } else {
               alert("Izin notifikasi ditolak. Cek pengaturan browser.");
           }
       } else {
           setNotificationsEnabled(false);
-          saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, false, audioEnabled);
+          saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, false, audioEnabled, prayerCorrections);
       }
   }
 
@@ -567,6 +613,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         location,
         prayerTimes,
         prayerSchedule,
+        prayerCorrections,
+        setPrayerCorrections,
         hijriDate,
         nextPrayer,
         manualLocation,

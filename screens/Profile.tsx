@@ -28,7 +28,7 @@ const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: 
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections } = useApp();
   const { user, logout } = useAuth();
   
   // Location Search State
@@ -39,6 +39,9 @@ export const Profile = () => {
   
   // Date Picker State
   const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // Correction State
+  const [showCorrection, setShowCorrection] = useState(false);
 
   // iOS Detection for Install Instructions
   const [isIOS, setIsIOS] = useState(false);
@@ -80,6 +83,11 @@ export const Profile = () => {
   // Toggle Language
   const handleLanguageToggle = () => {
       setLanguage(language === 'id' ? 'en' : 'id');
+  };
+  
+  const updateCorrection = (key: string, delta: number) => {
+      const current = prayerCorrections[key] || 0;
+      setPrayerCorrections({ ...prayerCorrections, [key]: current + delta });
   };
 
   return (
@@ -158,6 +166,14 @@ export const Profile = () => {
                     Klik untuk mengubah.
                 </p>
                 
+                {/* Correction */}
+                 <SettingItem 
+                    icon="tune" 
+                    label="Koreksi Waktu (Ikhtiyat)" 
+                    value="Atur Manual" 
+                    onClick={() => setShowCorrection(true)}
+                />
+
                 {/* 1st Ramadhan Setting */}
                 <SettingItem 
                     icon="calendar_month" 
@@ -345,6 +361,49 @@ export const Profile = () => {
                         className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
                     >
                         {t('save')}
+                    </button>
+                 </div>
+            </div>
+        )}
+
+        {/* CORRECTION MODAL */}
+        {showCorrection && (
+             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-bold">Koreksi Waktu (Ikhtiyat)</h3>
+                         <button onClick={() => setShowCorrection(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                    <p className="text-sm opacity-60 leading-tight">
+                        Jika jadwal berbeda dengan masjid lokal, tambahkan +/- menit di sini.
+                    </p>
+                    
+                    <div className="space-y-3">
+                        {['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((key) => (
+                            <div key={key} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl bg-gray-50/50">
+                                <span className="font-bold capitalize w-20">{key}</span>
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => updateCorrection(key, -1)} className="size-8 rounded-full bg-white border shadow-sm flex items-center justify-center hover:bg-gray-100">
+                                        <span className="material-symbols-outlined text-sm">remove</span>
+                                    </button>
+                                    <span className="font-mono w-8 text-center font-bold">
+                                        {(prayerCorrections[key] || 0) > 0 ? `+${prayerCorrections[key]}` : (prayerCorrections[key] || 0)}
+                                    </span>
+                                    <button onClick={() => updateCorrection(key, 1)} className="size-8 rounded-full bg-[var(--color-primary)] text-white shadow-sm flex items-center justify-center">
+                                        <span className="material-symbols-outlined text-sm">add</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <button 
+                        onClick={() => setShowCorrection(false)}
+                        className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
+                    >
+                        Selesai
                     </button>
                  </div>
             </div>
