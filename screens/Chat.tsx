@@ -32,7 +32,7 @@ export const ChatScreen = () => {
     // Subscribe to chat list
     useEffect(() => {
         if (!user) return;
-        const unsubscribe = ChatService.subscribeToChats(user.uid, (updatedChats) => {
+        const unsubscribe = ChatService.subscribeToChats(user.id, (updatedChats) => {
             setChats(updatedChats);
         });
         return () => unsubscribe();
@@ -57,7 +57,7 @@ export const ChatScreen = () => {
         if (!newMessageText.trim() || !activeChat || !user) return;
 
         try {
-            await ChatService.sendMessage(activeChat.id, user.uid, newMessageText);
+            await ChatService.sendMessage(activeChat.id, user.id, newMessageText);
             setNewMessageText('');
         } catch (error) {
             console.error("Failed to send message", error);
@@ -70,7 +70,7 @@ export const ChatScreen = () => {
         if (query.length > 2) {
             const results = await ChatService.searchUsers(query);
             // Filter out self
-            setSearchResults(results.filter(u => u.id !== user?.uid));
+            setSearchResults(results.filter(u => u.id !== user?.id));
         } else {
             setSearchResults([]);
         }
@@ -87,7 +87,7 @@ export const ChatScreen = () => {
             if (existingChat) {
                 setActiveChat(existingChat);
             } else {
-                const newChatId = await ChatService.createChat([user.uid, otherUser.id], 'direct');
+                const newChatId = await ChatService.createChat([user.id, otherUser.id], 'direct');
                 // We might need to wait for the subscription to update, or manually set active chat
                 // For now, let's just set a temporary object or wait
                 // A better UX is to optimistically set it, but let's wait for the subscription
@@ -95,7 +95,7 @@ export const ChatScreen = () => {
                 setActiveChat({
                     id: newChatId,
                     type: 'direct',
-                    participants: [user.uid, otherUser.id],
+                    participants: [user.id, otherUser.id],
                     participantDetails: [otherUser],
                     createdAt: new Date(),
                     updatedAt: new Date()
@@ -114,13 +114,13 @@ export const ChatScreen = () => {
     const getChatName = (chat: Chat) => {
         if (chat.type === 'group') return chat.groupName || 'Group Chat';
         // For direct chat, find the other participant
-        const other = chat.participantDetails?.find(p => p.id !== user?.uid);
+        const other = chat.participantDetails?.find(p => p.id !== user?.id);
         return other?.name || 'Unknown User';
     };
 
     const getChatAvatar = (chat: Chat) => {
         if (chat.type === 'group') return chat.groupPhoto || 'https://ui-avatars.com/api/?name=Group';
-        const other = chat.participantDetails?.find(p => p.id !== user?.uid);
+        const other = chat.participantDetails?.find(p => p.id !== user?.id);
         return other?.photoUrl || `https://ui-avatars.com/api/?name=${getChatName(chat)}`;
     };
 
@@ -150,7 +150,7 @@ export const ChatScreen = () => {
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.map((msg) => {
-                        const isMe = msg.senderId === user?.uid;
+                        const isMe = msg.senderId === user?.id;
                         return (
                             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[75%] rounded-2xl px-4 py-2 shadow-sm ${
@@ -237,7 +237,7 @@ export const ChatScreen = () => {
                                 <p className="text-sm text-gray-500 truncate">
                                     {chat.lastMessage ? (
                                         <>
-                                            {chat.lastMessage.senderId === user?.uid && <span className="text-xs mr-1">You:</span>}
+                                            {chat.lastMessage.senderId === user?.id && <span className="text-xs mr-1">You:</span>}
                                             {chat.lastMessage.text}
                                         </>
                                     ) : (

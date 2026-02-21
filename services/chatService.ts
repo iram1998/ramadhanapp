@@ -92,8 +92,9 @@ export const ChatService = {
 
         const q = query(
             collection(db, 'chats'), 
-            where('participants', 'array-contains', userId),
-            orderBy('updatedAt', 'desc')
+            where('participants', 'array-contains', userId)
+            // Removed orderBy to avoid needing a composite index immediately.
+            // We will sort client-side below.
         );
 
         return onSnapshot(q, async (snapshot) => {
@@ -102,6 +103,13 @@ export const ChatService = {
                 ...doc.data()
             } as Chat));
             
+            // Sort client-side by updatedAt desc
+            chats.sort((a, b) => {
+                const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : new Date(a.updatedAt).getTime();
+                const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : new Date(b.updatedAt).getTime();
+                return timeB - timeA;
+            });
+
             // Hydrate participant details (fetch names/avatars)
             // In a real app, you might want to cache this or use a separate listener for users.
             const hydratedChats = await Promise.all(chats.map(async (chat) => {

@@ -4,8 +4,9 @@ import { Theme, Task, DailyProgress, QuranProgress, PrayerTime, HistoryData, Pra
 import { THEMES, INITIAL_TASKS, TRANSLATIONS, ADZAN_AUDIO_URL, ACHIEVEMENTS } from '../constants';
 import { getPrayerTimes, getHijriDate, calculateRamadhanDay, addMinutesToTime } from '../utils';
 import { useAuth } from './AuthContext';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { doc, setDoc, onSnapshot, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
 
 interface AppContextType {
   // Navigation
@@ -445,8 +446,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           return;
       }
       try {
+          // 1. Update Firestore
           const userRef = doc(db, 'users', user.id);
           await updateDoc(userRef, { name: newName });
+          
+          // 2. Update Firebase Auth Profile (for immediate consistency in some parts of the app)
+          if (auth && auth.currentUser) {
+              await updateProfile(auth.currentUser, { displayName: newName });
+          }
       } catch (e) {
           console.error("Update name error", e);
       }
