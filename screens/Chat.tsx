@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext'; // Import useApp
 import { ChatService } from '../services/chatService';
 import { Chat, Message, UserProfile } from '../types';
 import { Timestamp } from 'firebase/firestore';
+import { FriendProfile } from './FriendProfile';
 
 // Simple date formatter if date-fns is not available
 const formatDate = (timestamp: any) => {
@@ -19,6 +21,7 @@ const formatDate = (timestamp: any) => {
 
 export const ChatScreen = () => {
     const { user } = useAuth();
+    const { friendsLeaderboard } = useApp(); // Get friends list
     const [view, setView] = useState<'list' | 'room'>('list');
     const [activeChat, setActiveChat] = useState<Chat | null>(null);
     const [chats, setChats] = useState<Chat[]>([]);
@@ -29,10 +32,19 @@ export const ChatScreen = () => {
     const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Group Chat State
+    const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+    const [groupName, setGroupName] = useState('');
+    const [selectedGroupMembers, setSelectedGroupMembers] = useState<UserProfile[]>([]);
+
+    // Friend Profile State
+    const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+
     // Subscribe to chat list
     useEffect(() => {
         if (!user) return;
         const unsubscribe = ChatService.subscribeToChats(user.id, (updatedChats) => {
+            // Calculate unread counts locally if needed, but for now we rely on the UI to show bold
             setChats(updatedChats);
         });
         return () => unsubscribe();
@@ -44,9 +56,17 @@ export const ChatScreen = () => {
         const unsubscribe = ChatService.subscribeToMessages(activeChat.id, (updatedMessages) => {
             setMessages(updatedMessages);
             scrollToBottom();
+            
+            // Mark as read if I'm viewing and there are unread messages
+            if (user) {
+                const hasUnread = updatedMessages.some(m => !m.readBy.includes(user.id));
+                if (hasUnread) {
+                    ChatService.markMessagesAsRead(activeChat.id, user.id);
+                }
+            }
         });
         return () => unsubscribe();
-    }, [activeChat]);
+    }, [activeChat, user]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,6 +98,17 @@ export const ChatScreen = () => {
 
     const startChat = async (otherUser: UserProfile) => {
         if (!user) return;
+        
+        if (isCreatingGroup) {
+            // Add to selection if not already selected
+            if (!selectedGroupMembers.find(m => m.id === otherUser.id)) {
+                setSelectedGroupMembers([...selectedGroupMembers, otherUser]);
+            }
+            setSearchQuery('');
+            setSearchResults([]);
+            return;
+        }
+
         try {
             // Check if chat already exists in local list
             const existingChat = chats.find(c => 
@@ -88,10 +119,6 @@ export const ChatScreen = () => {
                 setActiveChat(existingChat);
             } else {
                 const newChatId = await ChatService.createChat([user.id, otherUser.id], 'direct');
-                // We might need to wait for the subscription to update, or manually set active chat
-                // For now, let's just set a temporary object or wait
-                // A better UX is to optimistically set it, but let's wait for the subscription
-                // Actually, let's just fetch it or create a partial object
                 setActiveChat({
                     id: newChatId,
                     type: 'direct',
@@ -109,6 +136,34 @@ export const ChatScreen = () => {
         }
     };
 
+    const handleCreateGroup = async () => {
+        if (!user || !groupName.trim() || selectedGroupMembers.length === 0) return;
+        
+        try {
+            const participantIds = [user.id, ...selectedGroupMembers.map(m => m.id)];
+            const newChatId = await ChatService.createGroupChat(participantIds, groupName);
+            
+            // Optimistic set
+            setActiveChat({
+                id: newChatId,
+                type: 'group',
+                participants: participantIds,
+                groupName: groupName,
+                participantDetails: selectedGroupMembers,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            
+            setView('room');
+            setShowNewChatModal(false);
+            setIsCreatingGroup(false);
+            setGroupName('');
+            setSelectedGroupMembers([]);
+        } catch (error) {
+            console.error("Failed to create group", error);
+        }
+    }
+
     // --- RENDER HELPERS ---
 
     const getChatName = (chat: Chat) => {
@@ -119,32 +174,45 @@ export const ChatScreen = () => {
     };
 
     const getChatAvatar = (chat: Chat) => {
-        if (chat.type === 'group') return chat.groupPhoto || 'https://ui-avatars.com/api/?name=Group';
+        if (chat.type === 'group') return chat.groupPhoto || `https://ui-avatars.com/api/?name=${chat.groupName}&background=random`;
         const other = chat.participantDetails?.find(p => p.id !== user?.id);
         return other?.photoUrl || `https://ui-avatars.com/api/?name=${getChatName(chat)}`;
     };
+
+    const getOtherUserId = (chat: Chat) => {
+        if (chat.type === 'group') return null;
+        return chat.participants.find(id => id !== user?.id);
+    }
 
     // --- VIEWS ---
 
     if (view === 'room' && activeChat) {
         return (
-            <div className="flex flex-col h-full bg-gray-50">
+            <div className="flex flex-col h-full bg-gray-50 relative">
                 {/* Header */}
                 <div className="bg-white p-4 shadow-sm flex items-center gap-3 sticky top-0 z-10">
                     <button onClick={() => setView('list')} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <img 
-                        src={getChatAvatar(activeChat)} 
-                        alt="Avatar" 
-                        className="w-10 h-10 rounded-full object-cover border border-gray-200"
-                    />
-                    <div>
-                        <h3 className="font-bold text-gray-800">{getChatName(activeChat)}</h3>
-                        <p className="text-xs text-gray-500">
-                            {activeChat.type === 'group' ? `${activeChat.participants.length} members` : 'Online'}
-                        </p>
-                    </div>
+                    <button 
+                        onClick={() => {
+                            const otherId = getOtherUserId(activeChat);
+                            if (otherId) setViewingProfileId(otherId);
+                        }}
+                        className="flex items-center gap-3 flex-1 text-left"
+                    >
+                        <img 
+                            src={getChatAvatar(activeChat)} 
+                            alt="Avatar" 
+                            className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                        />
+                        <div>
+                            <h3 className="font-bold text-gray-800">{getChatName(activeChat)}</h3>
+                            <p className="text-xs text-gray-500">
+                                {activeChat.type === 'group' ? `${activeChat.participants.length} members` : 'Click to view profile'}
+                            </p>
+                        </div>
+                    </button>
                 </div>
 
                 {/* Messages Area */}
@@ -158,10 +226,22 @@ export const ChatScreen = () => {
                                     ? 'bg-[var(--color-primary)] text-white rounded-tr-none' 
                                     : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'
                                 }`}>
+                                    {activeChat.type === 'group' && !isMe && (
+                                        <p className="text-[10px] font-bold text-[var(--color-primary)] mb-1 opacity-80">
+                                            {activeChat.participantDetails?.find(p => p.id === msg.senderId)?.name || 'Unknown'}
+                                        </p>
+                                    )}
                                     <p className="text-sm">{msg.text}</p>
-                                    <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-emerald-100' : 'text-gray-400'}`}>
-                                        {formatDate(msg.timestamp)}
-                                    </p>
+                                    <div className="flex justify-end items-center gap-1 mt-1">
+                                        <p className={`text-[10px] ${isMe ? 'text-emerald-100' : 'text-gray-400'}`}>
+                                            {formatDate(msg.timestamp)}
+                                        </p>
+                                        {isMe && (
+                                            <span className="material-symbols-outlined text-[10px] opacity-70">
+                                                {msg.readBy.length > 1 ? 'done_all' : 'check'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -186,17 +266,28 @@ export const ChatScreen = () => {
                         <span className="material-symbols-outlined">send</span>
                     </button>
                 </form>
+
+                {/* Friend Profile Modal */}
+                {viewingProfileId && (
+                    <FriendProfile 
+                        friendId={viewingProfileId} 
+                        onClose={() => setViewingProfileId(null)} 
+                    />
+                )}
             </div>
         );
     }
 
     // List View
     return (
-        <div className="flex flex-col h-full bg-white">
+        <div className="flex flex-col h-full bg-white relative">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
                 <h1 className="text-2xl font-bold text-gray-800">Chats</h1>
                 <button 
-                    onClick={() => setShowNewChatModal(true)}
+                    onClick={() => {
+                        setShowNewChatModal(true);
+                        setIsCreatingGroup(false);
+                    }}
                     className="bg-[var(--color-primary)] text-white p-2 rounded-full shadow-md hover:bg-emerald-700 transition-colors"
                 >
                     <span className="material-symbols-outlined">add_comment</span>
@@ -213,40 +304,45 @@ export const ChatScreen = () => {
                         </button>
                     </div>
                 ) : (
-                    chats.map(chat => (
-                        <div 
-                            key={chat.id}
-                            onClick={() => { setActiveChat(chat); setView('room'); }}
-                            className="flex items-center gap-4 p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors"
-                        >
-                            <div className="relative">
-                                <img 
-                                    src={getChatAvatar(chat)} 
-                                    alt="Avatar" 
-                                    className="w-12 h-12 rounded-full object-cover border border-gray-100"
-                                />
-                                {/* Online indicator could go here */}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="flex justify-between items-baseline mb-1">
-                                    <h3 className="font-bold text-gray-800 truncate">{getChatName(chat)}</h3>
-                                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                                        {formatDate(chat.lastMessage?.timestamp || chat.updatedAt)}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-gray-500 truncate">
-                                    {chat.lastMessage ? (
-                                        <>
-                                            {chat.lastMessage.senderId === user?.id && <span className="text-xs mr-1">You:</span>}
-                                            {chat.lastMessage.text}
-                                        </>
-                                    ) : (
-                                        <span className="italic text-gray-400">No messages yet</span>
+                    chats.map(chat => {
+                        const isUnread = chat.lastMessage && !chat.lastMessage.readBy.includes(user?.id || '');
+                        return (
+                            <div 
+                                key={chat.id}
+                                onClick={() => { setActiveChat(chat); setView('room'); }}
+                                className={`flex items-center gap-4 p-4 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors ${isUnread ? 'bg-blue-50/30' : ''}`}
+                            >
+                                <div className="relative">
+                                    <img 
+                                        src={getChatAvatar(chat)} 
+                                        alt="Avatar" 
+                                        className="w-12 h-12 rounded-full object-cover border border-gray-100"
+                                    />
+                                    {isUnread && (
+                                        <div className="absolute top-0 right-0 size-3 bg-red-500 rounded-full border-2 border-white"></div>
                                     )}
-                                </p>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-baseline mb-1">
+                                        <h3 className={`text-gray-800 truncate ${isUnread ? 'font-black' : 'font-bold'}`}>{getChatName(chat)}</h3>
+                                        <span className={`text-xs whitespace-nowrap ${isUnread ? 'text-[var(--color-primary)] font-bold' : 'text-gray-400'}`}>
+                                            {formatDate(chat.lastMessage?.timestamp || chat.updatedAt)}
+                                        </span>
+                                    </div>
+                                    <p className={`text-sm truncate ${isUnread ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
+                                        {chat.lastMessage ? (
+                                            <>
+                                                {chat.lastMessage.senderId === user?.id && <span className="text-xs mr-1">You:</span>}
+                                                {chat.lastMessage.text}
+                                            </>
+                                        ) : (
+                                            <span className="italic text-gray-400">No messages yet</span>
+                                        )}
+                                    </p>
+                                </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
 
@@ -255,13 +351,44 @@ export const ChatScreen = () => {
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                         <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                            <h3 className="font-bold text-lg">New Message</h3>
+                            <h3 className="font-bold text-lg">{isCreatingGroup ? 'New Group' : 'New Chat'}</h3>
                             <button onClick={() => setShowNewChatModal(false)} className="p-1 hover:bg-gray-100 rounded-full">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
                         
-                        <div className="p-4">
+                        <div className="p-4 space-y-3">
+                            {!isCreatingGroup ? (
+                                <button 
+                                    onClick={() => setIsCreatingGroup(true)}
+                                    className="w-full flex items-center gap-3 p-3 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-xl font-bold hover:bg-[var(--color-primary)]/20 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined">group_add</span>
+                                    Create New Group
+                                </button>
+                            ) : (
+                                <div className="space-y-3">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Group Name" 
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                                        value={groupName}
+                                        onChange={(e) => setGroupName(e.target.value)}
+                                    />
+                                    {/* Selected Members Chips */}
+                                    {selectedGroupMembers.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedGroupMembers.map(m => (
+                                                <span key={m.id} className="text-xs bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1">
+                                                    {m.name}
+                                                    <button onClick={() => setSelectedGroupMembers(prev => prev.filter(x => x.id !== m.id))} className="hover:text-red-500">×</button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="relative">
                                 <span className="material-symbols-outlined absolute left-3 top-3 text-gray-400">search</span>
                                 <input 
@@ -275,31 +402,87 @@ export const ChatScreen = () => {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-2">
+                        <div className="flex-1 overflow-y-auto p-2 min-h-[200px]">
                             {searchResults.length > 0 ? (
-                                searchResults.map(result => (
-                                    <button 
-                                        key={result.id}
-                                        onClick={() => startChat(result)}
-                                        className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-colors text-left"
-                                    >
-                                        <img src={result.photoUrl || `https://ui-avatars.com/api/?name=${result.name}`} className="w-10 h-10 rounded-full" alt="" />
-                                        <div>
-                                            <p className="font-bold text-gray-800">{result.name}</p>
-                                            <p className="text-xs text-gray-500">{result.email}</p>
-                                        </div>
-                                    </button>
-                                ))
+                                searchResults.map(result => {
+                                    const isSelected = selectedGroupMembers.find(m => m.id === result.id);
+                                    return (
+                                        <button 
+                                            key={result.id}
+                                            onClick={() => startChat(result)}
+                                            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${isSelected ? 'bg-[var(--color-primary)]/10' : 'hover:bg-gray-50'}`}
+                                        >
+                                            <img src={result.photoUrl || `https://ui-avatars.com/api/?name=${result.name}`} className="w-10 h-10 rounded-full" alt="" />
+                                            <div className="flex-1">
+                                                <p className="font-bold text-gray-800">{result.name}</p>
+                                                <p className="text-xs text-gray-500">{result.email}</p>
+                                            </div>
+                                            {isCreatingGroup && (
+                                                <div className={`size-5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-[var(--color-primary)] border-transparent' : 'border-gray-300'}`}>
+                                                    {isSelected && <span className="material-symbols-outlined text-white text-xs">check</span>}
+                                                </div>
+                                            )}
+                                        </button>
+                                    );
+                                })
                             ) : searchQuery.length > 2 ? (
                                 <div className="text-center p-8 text-gray-400">
                                     <p>No users found</p>
                                 </div>
                             ) : (
-                                <div className="text-center p-8 text-gray-400">
-                                    <p>Type to search people</p>
+                                // Show Friends List by Default
+                                <div className="space-y-2">
+                                    <p className="px-3 text-xs font-bold text-gray-400 uppercase">Friends</p>
+                                    {friendsLeaderboard.filter(f => !f.isCurrentUser).map(friend => {
+                                         const isSelected = selectedGroupMembers.find(m => m.id === friend.id);
+                                         // Map LeaderboardEntry to UserProfile structure roughly
+                                         const profile: UserProfile = {
+                                             id: friend.id,
+                                             name: friend.name,
+                                             email: friend.email || '',
+                                             photoUrl: friend.avatar,
+                                             isStatsLocked: false // Default
+                                         };
+
+                                         return (
+                                            <button 
+                                                key={friend.id}
+                                                onClick={() => startChat(profile)}
+                                                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${isSelected ? 'bg-[var(--color-primary)]/10' : 'hover:bg-gray-50'}`}
+                                            >
+                                                <img src={friend.avatar || `https://ui-avatars.com/api/?name=${friend.name}`} className="w-10 h-10 rounded-full" alt="" />
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-gray-800">{friend.name}</p>
+                                                    <p className="text-xs text-gray-500">{friend.email}</p>
+                                                </div>
+                                                {isCreatingGroup && (
+                                                    <div className={`size-5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-[var(--color-primary)] border-transparent' : 'border-gray-300'}`}>
+                                                        {isSelected && <span className="material-symbols-outlined text-white text-xs">check</span>}
+                                                    </div>
+                                                )}
+                                            </button>
+                                         );
+                                    })}
+                                    {friendsLeaderboard.filter(f => !f.isCurrentUser).length === 0 && (
+                                        <div className="text-center p-8 text-gray-400">
+                                            <p>No friends yet. Search to add!</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
+
+                        {isCreatingGroup && (
+                            <div className="p-4 border-t border-gray-100">
+                                <button 
+                                    onClick={handleCreateGroup}
+                                    disabled={!groupName.trim() || selectedGroupMembers.length === 0}
+                                    className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md disabled:opacity-50 hover:brightness-95"
+                                >
+                                    Create Group ({selectedGroupMembers.length})
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

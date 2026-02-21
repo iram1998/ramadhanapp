@@ -168,5 +168,48 @@ export const ChatService = {
         
         const snapshot = await getDocs(qEmail);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+    },
+
+    // 6. Create Group Chat
+    async createGroupChat(participants: string[], groupName: string, groupPhoto?: string): Promise<string> {
+        if (!db) throw new Error("Firestore not initialized");
+
+        const newChat = {
+            type: 'group',
+            participants,
+            groupName,
+            groupPhoto: groupPhoto || null,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            lastMessage: null
+        };
+
+        const docRef = await addDoc(collection(db, 'chats'), newChat);
+        return docRef.id;
+    },
+
+    // 7. Mark Messages as Read
+    async markMessagesAsRead(chatId: string, userId: string) {
+        if (!db) return;
+
+        // Get unread messages
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const q = query(messagesRef, where('readBy', '!=', userId)); // This might need an index if combined with other filters
+        // Simple approach: Get recent messages and update them client-side check
+        // Or better: Just update the chat metadata for "last read" per user, but here we track per message.
+        
+        // Let's just update the last 20 messages to be safe and simple without complex queries
+        const recentQ = query(messagesRef, orderBy('timestamp', 'desc'), limit(20));
+        const snapshot = await getDocs(recentQ);
+
+        const batch = [];
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            if (!data.readBy.includes(userId)) {
+                updateDoc(doc.ref, {
+                    readBy: arrayUnion(userId)
+                });
+            }
+        });
     }
 };

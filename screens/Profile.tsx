@@ -28,7 +28,7 @@ const SettingItem = ({ icon, label, toggle, value, checked, onClick, loading }: 
 );
 
 export const Profile = () => {
-  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements, friendsLeaderboard, incomingRequests, outgoingRequests, addFriendByEmail, acceptFriend, rejectFriend, removeFriend, updateDisplayName } = useApp();
+  const { theme, setThemeId, score, location, manualLocation, setManualLocation, refreshLocation, ramadhanStartDate, setRamadhanStartDate, t, language, setLanguage, notificationsEnabled, toggleNotifications, audioEnabled, toggleAudio, playTestAudio, isPlaying, stopAudio, isInstallable, installApp, prayerCorrections, setPrayerCorrections, achievements, friendsLeaderboard, incomingRequests, outgoingRequests, addFriendByEmail, acceptFriend, rejectFriend, removeFriend, updateDisplayName, isStatsLocked, toggleStatsLock } = useApp();
   const { user, logout } = useAuth();
   
   // Location Search State
@@ -488,6 +488,17 @@ export const Profile = () => {
                     value={language === 'id' ? 'Bahasa Indonesia' : 'English'} 
                     onClick={handleLanguageToggle}
                 />
+
+                <SettingItem 
+                    icon="lock" 
+                    label="Privasi Statistik" 
+                    toggle 
+                    checked={isStatsLocked}
+                    onClick={toggleStatsLock}
+                />
+                <p className="text-[10px] opacity-60 px-2">
+                    Jika aktif, teman tidak bisa melihat detail statistik ibadah Anda.
+                </p>
             </section>
 
             {/* Logout */}

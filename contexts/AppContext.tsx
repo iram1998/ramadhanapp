@@ -69,6 +69,10 @@ interface AppContextType {
   
   updateDisplayName: (newName: string) => Promise<void>;
   
+  // Privacy
+  isStatsLocked: boolean;
+  toggleStatsLock: () => void;
+
   // New: Achievement Popup State
   newlyUnlockedAchievement: Achievement | null;
   closeAchievementPopup: () => void;
@@ -136,6 +140,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Gamification & Social State
   const [achievements, setAchievements] = useState<string[]>([]);
   const [newlyUnlockedAchievement, setNewlyUnlockedAchievement] = useState<Achievement | null>(null);
+  const [isStatsLocked, setIsStatsLocked] = useState(false); // New State
   
   const [friendsLeaderboard, setFriendsLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<LeaderboardEntry[]>([]);
@@ -212,9 +217,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const toggleAudio = () => {
       const newState = !audioEnabled;
       setAudioEnabled(newState);
-      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, newState, prayerCorrections, achievements);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, newState, prayerCorrections, achievements, isStatsLocked);
   };
 
+  const toggleStatsLock = () => {
+      const newState = !isStatsLocked;
+      setIsStatsLocked(newState);
+      saveDataToFirestore(tasks, score, fastingStatus, currentThemeId, quranProgress, manualLocation, ramadhanStartDate, history, lastRecordedDate, pagesReadToday, dzikirCounts, language, notificationsEnabled, audioEnabled, prayerCorrections, achievements, newState);
+  };
 
   // --- FIRESTORE SYNC ---
   const saveDataToFirestore = async (
@@ -233,7 +243,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       newNotif: boolean,
       newAudio: boolean,
       newCorrections: PrayerCorrections,
-      newAchievements: string[]
+      newAchievements: string[],
+      newStatsLocked: boolean // New param
   ) => {
     if (!user || !db || isDemoUser) return;
 
@@ -256,6 +267,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             audioEnabled: newAudio,
             prayerCorrections: newCorrections,
             achievements: newAchievements,
+            isStatsLocked: newStatsLocked, // Save to DB
             lastUpdated: new Date().toISOString()
         }, { merge: true });
     } catch (e) {
@@ -567,6 +579,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             if (data.audioEnabled !== undefined) setAudioEnabled(data.audioEnabled);
             if (data.prayerCorrections) setPrayerCorrectionsState(data.prayerCorrections);
             if (data.achievements) setAchievements(data.achievements);
+            if (data.isStatsLocked !== undefined) setIsStatsLocked(data.isStatsLocked);
             
             // Update IDs state (triggers the other useEffect to fetch profiles)
             setFriendIds(fIds);
@@ -1065,7 +1078,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         updateDisplayName,
 
         newlyUnlockedAchievement,
-        closeAchievementPopup
+        closeAchievementPopup,
+        isStatsLocked,
+        toggleStatsLock
       }}
     >
       {children}
