@@ -124,3 +124,40 @@ export interface LeaderboardEntry {
   rank: number;
   email?: string; // Optional for friend search display
 }
+
+// --- Chat Feature Types ---
+
+export interface Chat {
+  id: string;
+  type: 'direct' | 'group';
+  participants: string[]; // User IDs
+  participantDetails?: UserProfile[]; // Hydrated for UI
+  lastMessage?: {
+    text: string;
+    senderId: string;
+    timestamp: any; // Firestore Timestamp or Date
+    readBy: string[];
+  };
+  groupName?: string;
+  groupPhoto?: string;
+  createdAt: any;
+  updatedAt: any;
+  unreadCount?: number; // Calculated on client
+}
+
+export interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  text: string;
+  timestamp: any;
+  readBy: string[];
+}
+
+export interface UserProfile {
+    id: string;
+    name: string;
+    email: string;
+    photoUrl: string;
+    isOnline?: boolean;
+}

@@ -9,6 +9,7 @@ import { Quran } from './screens/Quran';
 import { Dua } from './screens/Dua';
 import { Profile } from './screens/Profile';
 import { Login } from './screens/Login';
+import { ChatScreen } from './screens/Chat';
 
 // NEW: Achievement Popup Component
 const AchievementPopup = () => {
@@ -67,6 +68,7 @@ const AppContent = () => {
       case 'tracker': return <Tracker />;
       case 'quran': return <Quran />;
       case 'doa': return <Dua />;
+      case 'chat': return <ChatScreen />;
       case 'profile': return <Profile />;
       default: return <Dashboard />;
     }

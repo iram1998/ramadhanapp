@@ -63,6 +63,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
               isActive={activeTab === 'doa'} 
               onClick={() => onTabChange('doa')} 
             />
+            <NavButton 
+              icon="chat" 
+              label={t('nav_chat')} 
+              isActive={activeTab === 'chat'} 
+              onClick={() => onTabChange('chat')} 
+            />
              <NavButton 
               icon="person" 
               label={t('nav_profile')} 
