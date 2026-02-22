@@ -140,6 +140,8 @@ export interface Chat {
   };
   groupName?: string;
   groupPhoto?: string;
+  description?: string; // Group description
+  adminIds?: string[]; // IDs of admins who can manage the group
   createdAt: any;
   updatedAt: any;
   unreadCount?: number; // Calculated on client

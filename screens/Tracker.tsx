@@ -129,9 +129,6 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
     const qiblaBearing = calculateQiblaDirection(lat, lon);
     
     // Calculate rotation needed for the arrow
-    // Arrow points to Qibla.
-    // If phone faces North (alpha=0), arrow should rotate 'qiblaBearing' deg.
-    // If phone faces East (alpha=90), arrow should rotate 'qiblaBearing - 90'.
     const arrowRotation = alpha !== null ? (qiblaBearing - alpha) : qiblaBearing;
 
     useEffect(() => {
@@ -145,8 +142,6 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
     }, []);
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
-        // alpha: rotation around z-axis (compass direction)
-        // webkitCompassHeading is for iOS
         let heading = 0;
         if ((e as any).webkitCompassHeading) {
             heading = (e as any).webkitCompassHeading;
@@ -170,22 +165,26 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
                 console.error(error);
             }
         } else {
-            setPermissionGranted(true); // Should have been handled in useEffect, but just in case
+            setPermissionGranted(true); 
         }
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in text-white">
-            <div className="w-full max-w-sm flex flex-col items-center text-center relative">
-                 <button onClick={onClose} className="absolute top-0 right-0 p-2 bg-white/10 rounded-full hover:bg-white/20">
-                    <span className="material-symbols-outlined">close</span>
+        <div className="min-h-screen bg-slate-900 text-white flex flex-col animate-fade-in">
+            {/* Header */}
+            <header className="p-4 flex items-center justify-between border-b border-white/10">
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10">
+                    <span className="material-symbols-outlined">arrow_back</span>
                 </button>
+                <h2 className="text-lg font-bold">Arah Kiblat</h2>
+                <div className="size-10"></div>
+            </header>
 
-                <h2 className="text-2xl font-bold mb-1">Arah Kiblat</h2>
+            <main className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
                 <p className="text-sm opacity-60 mb-8">Ka'bah berada di {Math.round(qiblaBearing)}° dari Utara.</p>
                 
                 {!permissionGranted ? (
-                    <div className="bg-white/10 p-6 rounded-2xl border border-white/20">
+                    <div className="bg-white/10 p-6 rounded-2xl border border-white/20 max-w-xs">
                         <span className="material-symbols-outlined text-4xl mb-2 opacity-50">explore_off</span>
                         <p className="mb-4 text-sm">Izin kompas diperlukan untuk fitur ini (iOS/Mobile).</p>
                         <button onClick={requestAccess} className="bg-[var(--color-primary)] px-6 py-2 rounded-full font-bold shadow-lg">
@@ -193,7 +192,7 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
                         </button>
                     </div>
                 ) : (
-                    <div className="relative size-64 flex items-center justify-center">
+                    <div className="relative size-72 sm:size-80 flex items-center justify-center">
                         {/* Compass Rose Background */}
                         <div 
                             className="absolute inset-0 border-4 border-white/20 rounded-full transition-transform duration-200 ease-out flex items-center justify-center"
@@ -212,7 +211,7 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
 
                         {/* Qibla Pointer (Green Arrow) */}
                         <div 
-                             className="absolute w-1 h-32 origin-bottom transition-transform duration-300 ease-out"
+                             className="absolute w-1 h-36 origin-bottom transition-transform duration-300 ease-out"
                              style={{ 
                                  transform: `rotate(${arrowRotation}deg)`, 
                                  bottom: '50%' 
@@ -220,17 +219,17 @@ const QiblaFinder = ({ onClose, lat, lon }: { onClose: () => void, lat: number, 
                         >
                             <div className="w-full h-full flex flex-col items-center">
                                 <div className="size-12 -mt-6">
-                                    <span className="material-symbols-outlined text-4xl text-[var(--color-primary)] drop-shadow-[0_0_10px_rgba(5,150,105,0.8)]" style={{ transform: 'rotate(-45deg)' }}>navigation</span>
+                                    <span className="material-symbols-outlined text-5xl text-[var(--color-primary)] drop-shadow-[0_0_15px_rgba(5,150,105,0.8)]" style={{ transform: 'rotate(-45deg)' }}>navigation</span>
                                 </div>
                             </div>
                         </div>
                         
-                        <div className="absolute text-[10px] bottom-[-40px] opacity-50">
+                        <div className="absolute text-[10px] bottom-[-60px] opacity-50 max-w-[200px]">
                             Pastikan HP datar. Jauhkan dari magnet/logam.
                         </div>
                     </div>
                 )}
-            </div>
+            </main>
         </div>
     );
 };
@@ -507,6 +506,11 @@ export const Tracker = () => {
             </div>
         </div>
       );
+  }
+
+  // --- RENDER: QIBLA FULL PAGE VIEW ---
+  if (activeTool === 'qibla') {
+      return <QiblaFinder onClose={() => setActiveTool(null)} lat={manualLocation?.lat || -6.1702} lon={manualLocation?.lon || 106.8310} />;
   }
 
   // --- RENDER: MAIN TRACKER VIEW ---
@@ -796,13 +800,6 @@ export const Tracker = () => {
 
         {/* MODALS */}
         {activeTool === 'zakat' && <ZakatCalculator onClose={() => setActiveTool(null)} />}
-        {activeTool === 'qibla' && (
-            <QiblaFinder 
-                onClose={() => setActiveTool(null)} 
-                lat={manualLocation?.lat || -6.1702} 
-                lon={manualLocation?.lon || 106.8310} 
-            />
-        )}
     </div>
   );
 };

@@ -12,7 +12,8 @@ import {
     getDocs,
     limit,
     serverTimestamp,
-    getDoc
+    getDoc,
+    deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Chat, Message, UserProfile } from '../types';
@@ -171,7 +172,7 @@ export const ChatService = {
     },
 
     // 6. Create Group Chat
-    async createGroupChat(participants: string[], groupName: string, groupPhoto?: string): Promise<string> {
+    async createGroupChat(participants: string[], groupName: string, groupPhoto?: string, description?: string): Promise<string> {
         if (!db) throw new Error("Firestore not initialized");
 
         const newChat = {
@@ -179,6 +180,8 @@ export const ChatService = {
             participants,
             groupName,
             groupPhoto: groupPhoto || null,
+            description: description || null,
+            adminIds: [participants[0]], // Creator is the first admin
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
             lastMessage: null
@@ -188,7 +191,17 @@ export const ChatService = {
         return docRef.id;
     },
 
-    // 7. Mark Messages as Read
+    // 7. Delete Chat (Admin Only for Groups)
+    async deleteChat(chatId: string) {
+        if (!db) return;
+        
+        // Delete the chat document
+        // Note: This leaves orphaned messages in the subcollection, but they won't be accessible without the parent doc.
+        // For a full cleanup, a Cloud Function is recommended.
+        await deleteDoc(doc(db, 'chats', chatId));
+    },
+
+    // 8. Mark Messages as Read
     async markMessagesAsRead(chatId: string, userId: string) {
         if (!db) return;
 

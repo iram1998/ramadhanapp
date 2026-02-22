@@ -128,11 +128,15 @@ export const Quran = () => {
               setIsPlaying(false);
           });
           
-          // Scroll to playing ayah
-          const el = document.getElementById(`ayah-${content?.ayahs[ayahIndex].numberInSurah}`);
-          if(el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
+          // Scroll to playing ayah with a slight delay to allow UI updates (like player bar appearing)
+          setTimeout(() => {
+              const targetAyah = content?.ayahs[ayahIndex];
+              const sNum = targetAyah?.surah?.number || (selectedItem?.type === 'surah' ? selectedItem.id : 0);
+              const el = document.getElementById(`ayah-${sNum}-${targetAyah?.numberInSurah}`);
+              if(el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+          }, 100);
       }
   };
 
@@ -463,7 +467,7 @@ export const Quran = () => {
                                                 </div>
                                             )}
 
-                                            <div className={`group scroll-mt-32 transition-colors duration-300 ${isActive ? 'bg-[var(--color-primary)]/5 rounded-2xl' : ''}`} id={`ayah-${ayah.numberInSurah}`}>
+                                            <div className={`group scroll-mt-32 transition-colors duration-300 ${isActive ? 'bg-[var(--color-primary)]/5 rounded-2xl' : ''}`} id={`ayah-${surahNumber || (selectedItem.type === 'surah' ? selectedItem.id : 0)}-${ayah.numberInSurah}`}>
                                                 <div className="bg-[var(--color-card)] rounded-2xl p-5 border border-transparent hover:border-[var(--color-primary)]/20 transition-all shadow-sm">
                                                     {/* Header: Number & Info */}
                                                     <div className="flex justify-between items-center mb-4 bg-gray-50/50 p-2 rounded-lg">
