@@ -94,6 +94,18 @@ export const Quran = () => {
       };
   }, []);
 
+  // Lock Body Scroll when Modals are Open
+  useEffect(() => {
+      if (showTargetModal) {
+          document.body.style.overflow = 'hidden';
+      } else {
+          document.body.style.overflow = 'auto';
+      }
+      return () => {
+          document.body.style.overflow = 'auto';
+      };
+  }, [showTargetModal]);
+
   // --- AUDIO HANDLERS ---
   const toggleAudio = (ayahIndex: number, audioUrl?: string) => {
       if (!audioUrl) {
@@ -743,7 +755,7 @@ export const Quran = () => {
 
         {/* Modal Target Khatam */}
         {showTargetModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                  <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
                     <div className="flex justify-between items-center">
                         <h3 className="text-lg font-bold">Target Khatam</h3>

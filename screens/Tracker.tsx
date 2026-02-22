@@ -33,7 +33,7 @@ const ZakatCalculator = ({ onClose }: { onClose: () => void }) => {
     const formatRupiah = (num: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
              <div className="bg-[var(--color-card)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
                 <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-[var(--color-bg)]">
                     <h3 className="text-lg font-bold flex items-center gap-2">
@@ -268,6 +268,18 @@ export const Tracker = () => {
       const today = new Date().toISOString().split('T')[0];
       setViewDate(today);
   }, []);
+
+  // Lock Body Scroll when Modals are Open
+  useEffect(() => {
+      if (activeTool === 'zakat' || activeTool === 'qibla') {
+          document.body.style.overflow = 'hidden';
+      } else {
+          document.body.style.overflow = 'auto';
+      }
+      return () => {
+          document.body.style.overflow = 'auto';
+      };
+  }, [activeTool]);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const isToday = viewDate === todayStr;

@@ -72,6 +72,18 @@ export const ChatScreen = () => {
         return () => unsubscribe();
     }, [activeChat, user]);
 
+    // Lock Body Scroll when Modals are Open
+    useEffect(() => {
+        if (showNewChatModal || showGroupInfo || viewingProfileId) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [showNewChatModal, showGroupInfo, viewingProfileId]);
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
@@ -345,7 +357,7 @@ export const ChatScreen = () => {
 
                 {/* Group Info Modal */}
                 {showGroupInfo && activeChat.type === 'group' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                         <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
                             <div className="relative h-32 bg-[var(--color-primary)]">
                                 <button 
@@ -491,7 +503,7 @@ export const ChatScreen = () => {
 
             {/* New Chat Modal */}
             {showNewChatModal && (
-                <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
                         <div className="p-4 border-b border-gray-100 flex justify-between items-center shrink-0">
                             <h3 className="font-bold text-lg">{isCreatingGroup ? 'New Group' : 'New Chat'}</h3>

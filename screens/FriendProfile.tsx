@@ -58,7 +58,7 @@ export const FriendProfile = ({ friendId, onClose }: FriendProfileProps) => {
 
     if (!profile && loading) {
         return (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="size-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
             </div>
         );
@@ -67,7 +67,7 @@ export const FriendProfile = ({ friendId, onClose }: FriendProfileProps) => {
     if (!profile) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
             <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative">
                 
                 {/* Header Image / Pattern */}

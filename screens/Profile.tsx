@@ -59,6 +59,18 @@ export const Profile = () => {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
+  // Lock Body Scroll when Modals are Open
+  useEffect(() => {
+      if (showLocationSearch || showDatePicker || showCorrection || showFriendsView) {
+          document.body.style.overflow = 'hidden';
+      } else {
+          document.body.style.overflow = 'auto';
+      }
+      return () => {
+          document.body.style.overflow = 'auto';
+      };
+  }, [showLocationSearch, showDatePicker, showCorrection, showFriendsView]);
+
   useEffect(() => {
       // Check if iOS
       const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -543,133 +555,140 @@ export const Profile = () => {
             </div>
         )}
 
-        {/* MODALS (Location, Date, Correction) Code kept same as previous... */}
+        {/* MODALS (Location, Date, Correction) */}
         {showLocationSearch && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                <div className="bg-[var(--color-card)] w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4">
-                    <div className="flex justify-between items-center mb-2">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-[var(--color-card)] w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
                         <h3 className="text-lg font-bold">Ubah Lokasi</h3>
                         <button onClick={() => setShowLocationSearch(false)} className="p-2 hover:bg-gray-100 rounded-full">
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
 
-                    <form onSubmit={handleSearch} className="relative">
-                        <input 
-                            autoFocus
-                            type="text" 
-                            placeholder={t('search_placeholder')} 
-                            className="w-full p-4 pl-12 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] transition-colors"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 opacity-40">search</span>
-                        <button 
-                            type="submit"
-                            disabled={isSearching}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--color-primary)] text-white px-3 py-1.5 rounded-lg text-sm font-bold disabled:opacity-50"
-                        >
-                            {isSearching ? '...' : 'Cari'}
-                        </button>
-                    </form>
-
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                        <button 
-                            onClick={handleUseGPS}
-                            className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-[var(--color-primary)]/5 border border-dashed border-[var(--color-primary)]/30 text-[var(--color-primary)] font-bold mb-4"
-                        >
-                            <span className="material-symbols-outlined">my_location</span>
-                            {t('use_gps')}
-                        </button>
-
-                        {searchResults.length > 0 && (
-                            <p className="text-xs font-bold uppercase opacity-50 px-2">Hasil Pencarian</p>
-                        )}
-                        
-                        {searchResults.map((city, idx) => (
+                    <div className="p-6 space-y-4 overflow-y-auto min-h-0">
+                        <form onSubmit={handleSearch} className="relative shrink-0">
+                            <input 
+                                autoFocus
+                                type="text" 
+                                placeholder={t('search_placeholder')} 
+                                className="w-full p-4 pl-12 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] transition-colors"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 opacity-40">search</span>
                             <button 
-                                key={idx}
-                                onClick={() => handleSelectCity(city)}
-                                className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-gray-50 border border-gray-100"
+                                type="submit"
+                                disabled={isSearching}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-[var(--color-primary)] text-white px-3 py-1.5 rounded-lg text-sm font-bold disabled:opacity-50"
                             >
-                                <span className="material-symbols-outlined opacity-40">location_city</span>
-                                <div>
-                                    <p className="font-bold text-sm text-[var(--color-text)]">{city.name}</p>
-                                    <p className="text-[10px] opacity-50">Lat: {city.lat.toFixed(2)}, Lon: {city.lon.toFixed(2)}</p>
-                                </div>
+                                {isSearching ? '...' : 'Cari'}
                             </button>
-                        ))}
+                        </form>
+
+                        <div className="space-y-2">
+                            <button 
+                                onClick={handleUseGPS}
+                                className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-[var(--color-primary)]/5 border border-dashed border-[var(--color-primary)]/30 text-[var(--color-primary)] font-bold mb-4"
+                            >
+                                <span className="material-symbols-outlined">my_location</span>
+                                {t('use_gps')}
+                            </button>
+
+                            {searchResults.length > 0 && (
+                                <p className="text-xs font-bold uppercase opacity-50 px-2">Hasil Pencarian</p>
+                            )}
+                            
+                            {searchResults.map((city, idx) => (
+                                <button 
+                                    key={idx}
+                                    onClick={() => handleSelectCity(city)}
+                                    className="w-full flex items-center gap-3 p-3 text-left rounded-xl hover:bg-gray-50 border border-gray-100"
+                                >
+                                    <span className="material-symbols-outlined opacity-40">location_city</span>
+                                    <div>
+                                        <p className="font-bold text-sm text-[var(--color-text)]">{city.name}</p>
+                                        <p className="text-[10px] opacity-50">Lat: {city.lat.toFixed(2)}, Lon: {city.lon.toFixed(2)}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
         )}
 
         {showDatePicker && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4">
-                    <div className="flex justify-between items-center">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
                         <h3 className="text-lg font-bold">Tetapkan 1 Ramadhan</h3>
                          <button onClick={() => setShowDatePicker(false)} className="p-2 hover:bg-gray-100 rounded-full">
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
-                    <p className="text-sm opacity-60">
-                        Pilih tanggal dimulainya 1 Ramadhan 1447H di wilayah Anda.
-                    </p>
-                    <input 
-                        type="date" 
-                        value={ramadhanStartDate}
-                        onChange={(e) => setRamadhanStartDate(e.target.value)}
-                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] font-bold text-lg text-center"
-                    />
-                    <button 
-                        onClick={() => setShowDatePicker(false)}
-                        className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
-                    >
-                        {t('save')}
-                    </button>
+                    <div className="p-6 space-y-4 overflow-y-auto">
+                        <p className="text-sm opacity-60">
+                            Pilih tanggal dimulainya 1 Ramadhan 1447H di wilayah Anda.
+                        </p>
+                        <input 
+                            type="date" 
+                            value={ramadhanStartDate}
+                            onChange={(e) => setRamadhanStartDate(e.target.value)}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-[var(--color-primary)] font-bold text-lg text-center"
+                        />
+                        <button 
+                            onClick={() => setShowDatePicker(false)}
+                            className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
+                        >
+                            {t('save')}
+                        </button>
+                    </div>
                  </div>
             </div>
         )}
 
         {showCorrection && (
-             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 max-h-[80vh] overflow-y-auto">
-                    <div className="flex justify-between items-center">
+             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                 <div className="bg-[var(--color-card)] w-full max-w-sm rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+                    <div className="p-6 border-b border-gray-100 flex justify-between items-center shrink-0">
                         <h3 className="text-lg font-bold">Koreksi Waktu (Ikhtiyat)</h3>
                          <button onClick={() => setShowCorrection(false)} className="p-2 hover:bg-gray-100 rounded-full">
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
-                    <p className="text-sm opacity-60 leading-tight">
-                        Jika jadwal berbeda dengan masjid lokal, tambahkan +/- menit di sini.
-                    </p>
                     
-                    <div className="space-y-3">
-                        {['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((key) => (
-                            <div key={key} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl bg-gray-50/50">
-                                <span className="font-bold capitalize w-20">{key}</span>
-                                <div className="flex items-center gap-4">
-                                    <button onClick={() => updateCorrection(key, -1)} className="size-8 rounded-full bg-white border shadow-sm flex items-center justify-center hover:bg-gray-100">
-                                        <span className="material-symbols-outlined text-sm">remove</span>
-                                    </button>
-                                    <span className="font-mono w-8 text-center font-bold">
-                                        {(prayerCorrections[key] || 0) > 0 ? `+${prayerCorrections[key]}` : (prayerCorrections[key] || 0)}
-                                    </span>
-                                    <button onClick={() => updateCorrection(key, 1)} className="size-8 rounded-full bg-[var(--color-primary)] text-white shadow-sm flex items-center justify-center">
-                                        <span className="material-symbols-outlined text-sm">add</span>
-                                    </button>
+                    <div className="p-6 space-y-4 overflow-y-auto min-h-0">
+                        <p className="text-sm opacity-60 leading-tight">
+                            Jika jadwal berbeda dengan masjid lokal, tambahkan +/- menit di sini.
+                        </p>
+                        
+                        <div className="space-y-3">
+                            {['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((key) => (
+                                <div key={key} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl bg-gray-50/50">
+                                    <span className="font-bold capitalize w-20">{key}</span>
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={() => updateCorrection(key, -1)} className="size-8 rounded-full bg-white border shadow-sm flex items-center justify-center hover:bg-gray-100">
+                                            <span className="material-symbols-outlined text-sm">remove</span>
+                                        </button>
+                                        <span className="font-mono w-8 text-center font-bold">
+                                            {(prayerCorrections[key] || 0) > 0 ? `+${prayerCorrections[key]}` : (prayerCorrections[key] || 0)}
+                                        </span>
+                                        <button onClick={() => updateCorrection(key, 1)} className="size-8 rounded-full bg-[var(--color-primary)] text-white shadow-sm flex items-center justify-center">
+                                            <span className="material-symbols-outlined text-sm">add</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
 
-                    <button 
-                        onClick={() => setShowCorrection(false)}
-                        className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
-                    >
-                        Selesai
-                    </button>
+                        <button 
+                            onClick={() => setShowCorrection(false)}
+                            className="w-full bg-[var(--color-primary)] text-white font-bold py-3 rounded-xl shadow-md hover:brightness-95"
+                        >
+                            Selesai
+                        </button>
+                    </div>
                  </div>
             </div>
         )}

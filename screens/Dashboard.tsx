@@ -348,7 +348,7 @@ export const Dashboard = () => {
                 <div 
                   className="relative size-40 rounded-full flex items-center justify-center transition-all duration-1000 shadow-inner bg-[var(--color-bg)]"
                   style={{
-                    background: `radial-gradient(closest-side, var(--color-card) 79%, transparent 80% 100%), conic-gradient(var(--color-primary) ${progressToNextLevel}%, var(--color-background) 0)`
+                    background: `radial-gradient(closest-side, var(--color-card) 79%, transparent 80% 100%), conic-gradient(var(--color-primary) ${progressToNextLevel}%, var(--color-bg) 0)`
                   }}
                 >
                     <div className="text-center">
