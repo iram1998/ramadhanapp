@@ -6,7 +6,6 @@ const RUNTIME_CACHE = 'runtime-cache-v1';
 const PRECACHE_URLS = [
     './',
     './index.html',
-    './index.tsx',
     './manifest.json',
     'https://cdn.tailwindcss.com',
     'https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;600;700&display=swap',

@@ -6,8 +6,8 @@ import App from './App';
 // Register Service Worker for PWA (Relative Path Update)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Gunakan ./sw.js bukan /sw.js untuk menghindari error 404 pada subpath
-    navigator.serviceWorker.register('./sw.js')
+    // Gunakan /sw.js karena sekarang ada di public/
+    navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
         console.log('SW registered with scope:', registration.scope);
       })
