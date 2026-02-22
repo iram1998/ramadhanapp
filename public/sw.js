@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'ramadhan-tracker-v4';
+const CACHE_NAME = 'ramadhan-tracker-v5';
 const RUNTIME_CACHE = 'runtime-cache-v1';
 
 // URL yang harus di-cache di awal

@@ -178,16 +178,45 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // --- AUDIO INITIALIZATION ---
+  // --- AUDIO INITIALIZATION & UNLOCK ---
   useEffect(() => {
     // Init audio object
     audioRef.current = new Audio(ADZAN_AUDIO_URL);
     audioRef.current.onended = () => setIsPlaying(false);
+
+    // Unlock Audio on First Interaction (Critical for PWA/Mobile)
+    const unlockAudio = () => {
+        if (audioRef.current) {
+            // Play and immediately pause to "bless" the audio element
+            const playPromise = audioRef.current.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    audioRef.current?.pause();
+                    audioRef.current!.currentTime = 0;
+                    console.log("Audio engine unlocked");
+                    // Remove listeners only after success
+                    window.removeEventListener('click', unlockAudio);
+                    window.removeEventListener('touchstart', unlockAudio);
+                    window.removeEventListener('keydown', unlockAudio);
+                }).catch(error => {
+                    console.log("Audio unlock attempt failed:", error);
+                });
+            }
+        }
+    };
+
+    window.addEventListener('click', unlockAudio);
+    window.addEventListener('touchstart', unlockAudio);
+    window.addEventListener('keydown', unlockAudio);
+
     return () => {
         if(audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
         }
+        window.removeEventListener('click', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
+        window.removeEventListener('keydown', unlockAudio);
     }
   }, []);
 
