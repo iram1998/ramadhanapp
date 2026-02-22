@@ -2,7 +2,7 @@
 import { Task, Theme, Achievement, Article } from './types';
 
 // URL Audio Adzan (Mishary Rashid Alafasy - Short/Clear version)
-export const ADZAN_AUDIO_URL = "https://media.blubrry.com/muslim_central_quran/podcasts.qurancentral.com/adhan/mishary-rashid-alafasy/adhan-mishary-rashid-alafasy.mp3";
+export const ADZAN_AUDIO_URL = "https://www.islamcan.com/audio/adhan/azan1.mp3";
 
 export const THEMES: Theme[] = [
   {
