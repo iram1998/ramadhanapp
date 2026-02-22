@@ -182,6 +182,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     // Init audio object
     audioRef.current = new Audio(ADZAN_AUDIO_URL);
+    audioRef.current.preload = 'auto';
     audioRef.current.onended = () => setIsPlaying(false);
 
     // Unlock Audio on First Interaction (Critical for PWA/Mobile)
@@ -193,11 +194,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 playPromise.then(() => {
                     audioRef.current?.pause();
                     audioRef.current!.currentTime = 0;
-                    console.log("Audio engine unlocked");
-                    // Remove listeners only after success
-                    window.removeEventListener('click', unlockAudio);
-                    window.removeEventListener('touchstart', unlockAudio);
-                    window.removeEventListener('keydown', unlockAudio);
+                    console.log("Audio engine unlocked successfully");
                 }).catch(error => {
                     console.log("Audio unlock attempt failed:", error);
                 });
@@ -205,9 +202,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    window.addEventListener('click', unlockAudio);
-    window.addEventListener('touchstart', unlockAudio);
-    window.addEventListener('keydown', unlockAudio);
+    // Use { once: true } to auto-remove listener after first trigger
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('touchstart', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
 
     return () => {
         if(audioRef.current) {
@@ -221,16 +219,41 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const playTestAudio = () => {
-      if (audioRef.current) {
-          if (isPlaying) {
-              audioRef.current.pause();
-              audioRef.current.currentTime = 0;
-              setIsPlaying(false);
-          } else {
-              audioRef.current.play().then(() => setIsPlaying(true)).catch(e => {
-                  console.warn("Audio play blocked", e);
-                  alert("Browser memblokir suara otomatis. Silakan interaksi dengan halaman terlebih dahulu.");
-              });
+      if (!audioRef.current) {
+          audioRef.current = new Audio(ADZAN_AUDIO_URL);
+          audioRef.current.onended = () => setIsPlaying(false);
+      }
+
+      const audio = audioRef.current;
+
+      if (isPlaying) {
+          audio.pause();
+          audio.currentTime = 0;
+          setIsPlaying(false);
+      } else {
+          // Explicitly call load() to ensure readyState is sufficient
+          // This helps on some mobile browsers if the audio was suspended
+          if (audio.readyState === 0) {
+              audio.load();
+          }
+
+          const playPromise = audio.play();
+          if (playPromise !== undefined) {
+              playPromise
+                  .then(() => setIsPlaying(true))
+                  .catch(e => {
+                      console.warn("Audio play blocked", e);
+                      // Fallback: Create a NEW audio instance immediately (guaranteed to work in click handler)
+                      const fallbackAudio = new Audio(ADZAN_AUDIO_URL);
+                      fallbackAudio.onended = () => setIsPlaying(false);
+                      audioRef.current = fallbackAudio; // Update ref to the working one
+                      
+                      fallbackAudio.play()
+                          .then(() => setIsPlaying(true))
+                          .catch(err => {
+                              alert(`Gagal memutar audio: ${err.message}. Pastikan tidak dalam mode Silent/Hening.`);
+                          });
+                  });
           }
       }
   };
