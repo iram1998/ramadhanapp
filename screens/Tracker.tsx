@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { getMonthlyPrayerTimes, calculateRamadhanDay, calculateQiblaDirection } from '../utils';
+import { getMonthlyPrayerTimes, calculateRamadhanDay, calculateQiblaDirection, addMinutesToTime } from '../utils';
 
 // --- SUB-COMPONENTS (TOOLS) ---
 
@@ -493,13 +493,13 @@ export const Tracker = () => {
                                         <span className="text-[10px] uppercase">{day.date.gregorian.month.en.slice(0,3)}</span>
                                     </div>
                                     <div className={`font-mono ${textClass}`}>
-                                        {day.timings.Imsak.split(' ')[0]}
+                                        {addMinutesToTime(day.timings.Imsak.split(' ')[0], prayerCorrections['imsak'] || 0)}
                                     </div>
                                     <div className={`font-mono ${textClass}`}>
-                                        {day.timings.Fajr.split(' ')[0]}
+                                        {addMinutesToTime(day.timings.Fajr.split(' ')[0], prayerCorrections['subuh'] || 0)}
                                     </div>
                                     <div className={`font-mono ${status === 'today' ? 'text-[var(--color-secondary)] font-extrabold text-base' : textClass}`}>
-                                        {day.timings.Maghrib.split(' ')[0]}
+                                        {addMinutesToTime(day.timings.Maghrib.split(' ')[0], prayerCorrections['maghrib'] || 0)}
                                     </div>
                                 </div>
                             );

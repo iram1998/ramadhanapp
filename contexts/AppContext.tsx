@@ -776,7 +776,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           };
 
           const fullList: PrayerTime[] = [
-              { name: 'Imsak', time: applyOffset(schedule.imsak, 'subuh'), isNext: false }, 
+              { name: 'Imsak', time: applyOffset(schedule.imsak, 'imsak'), isNext: false }, 
               ...schedule.list.map(p => ({
                   name: p.name,
                   time: applyOffset(p.time, p.id),
@@ -798,7 +798,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           setPrayerTimes(fullList);
           
           const timesDict: Record<string, string> = {
-              imsak: applyOffset(schedule.imsak, 'subuh'),
+              imsak: applyOffset(schedule.imsak, 'imsak'),
               subuh: applyOffset(schedule.times.subuh, 'subuh'),
               dhuha: applyOffset(schedule.times.dhuha, 'dhuha'),
               dzuhur: applyOffset(schedule.times.dzuhur, 'dzuhur'),

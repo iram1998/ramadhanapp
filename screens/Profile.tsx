@@ -416,7 +416,7 @@ export const Profile = () => {
 
         {/* FRIENDS FULL PAGE VIEW */}
         {showFriendsView && (
-            <div className="fixed inset-0 z-50 bg-[var(--color-bg)] animate-fade-in overflow-y-auto">
+            <div className="fixed inset-0 z-[100] bg-[var(--color-bg)] animate-fade-in overflow-y-auto">
                 <header className="sticky top-0 bg-[var(--color-bg)]/95 backdrop-blur-md border-b border-gray-100 p-4 flex items-center gap-3 z-10">
                     <button onClick={() => setShowFriendsView(false)} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
                         <span className="material-symbols-outlined">arrow_back</span>
@@ -664,7 +664,7 @@ export const Profile = () => {
                         </p>
                         
                         <div className="space-y-3">
-                            {['subuh', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((key) => (
+                            {['imsak', 'subuh', 'dhuha', 'dzuhur', 'ashar', 'maghrib', 'isya'].map((key) => (
                                 <div key={key} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl bg-gray-50/50">
                                     <span className="font-bold capitalize w-20">{key}</span>
                                     <div className="flex items-center gap-4">
